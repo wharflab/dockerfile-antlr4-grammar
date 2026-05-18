@@ -76,19 +76,22 @@ lexer grammar DockerComposeLexer;
     }
 }
 
+// Separators with whitespace lookahead
 COLON: ':' { Character.isWhitespace((char)_input.LA(1)) || _input.LA(1) == EOF || _input.LA(1) == '\r' || _input.LA(1) == '\n' }?;
 DASH: '-' { Character.isWhitespace((char)_input.LA(1)) || _input.LA(1) == EOF || _input.LA(1) == '\r' || _input.LA(1) == '\n' }?;
+COMMA: ',' { Character.isWhitespace((char)_input.LA(1)) || _input.LA(1) == EOF || _input.LA(1) == '\r' || _input.LA(1) == '\n' }?;
+
 LBRACKET: '[';
 RBRACKET: ']';
-COMMA: ',' { Character.isWhitespace((char)_input.LA(1)) || _input.LA(1) == EOF || _input.LA(1) == '\r' || _input.LA(1) == '\n' }?;
 
 STRING: '"' ( ~["\\] | '\\' . )* '"' | '\'' ( ~['\\] | '\\' . )* '\'';
 
-SCALAR: (~[ \t\r\n#[\],\-]|(':' ~[ \t\r\n])|('-' ~[ \t\r\n])|(',' ~[ \t\r\n]))+;
+// Scalar rule: exclude structural separators if they match the lookahead
+SCALAR: ( ~[ \t\r\n#[\],\-:] | (':' ~[ \t\r\n\r\n]) | ('-' ~[ \t\r\n\r\n]) | (',' ~[ \t\r\n\r\n]) )+;
 
 COMMENT: '#' ~[\r\n]* -> skip;
 
-WS: [ \t]+ -> channel(HIDDEN);
+WS: [ \t]+ -> skip;
 NEWLINE: ( '\r'? '\n' | '\r' )+;
 
 INDENT: { false }? 'INDENT';
