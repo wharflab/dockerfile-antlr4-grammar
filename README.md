@@ -4,18 +4,23 @@ This project provides a comprehensive ANTLR4 grammar for Dockerfiles.
 
 ## Features
 
-- **Lexer Modes:** Uses separate modes for instructions and arguments to avoid keyword collisions and handle "shell" content correctly.
-- **Instruction Support:** Supports all standard Dockerfile instructions: `FROM`, `RUN`, `CMD`, `LABEL`, `EXPOSE`, `ENV`, `ADD`, `COPY`, `ENTRYPOINT`, `VOLUME`, `USER`, `WORKDIR`, `ARG`, `ONBUILD`, `STOPSIGNAL`, `HEALTHCHECK`, `SHELL`.
+- **Dockerfile Support:**
+    - Lexer Modes for instructions/arguments.
+    - Robust shell command parsing.
+    - Recursive `ONBUILD` and `HEALTHCHECK CMD`.
+- **Docker Compose Support:**
+    - Indentation-aware Lexer (stack-based INDENT/DEDENT).
+    - Semantic predicates for separator vs. scalar disambiguation (handles `image: tag-name`, `host:port`, etc.).
+    - Support for nested blocks, lists (block and flow), and key-value pairs.
 - **Form Support:** Handles both shell form and exec form (`[...]`) for instructions.
 - **Line Continuations:** Correctly handles multi-line instructions using `\` continuation character.
 - **Comments:** Supports single-line comments starting with `#`.
-- **Recursive Instructions:** Properly handles `ONBUILD` and `HEALTHCHECK CMD`.
 
 ## Files
 
-- `DockerfileLexer.g4`: Lexer definitions with modes.
-- `DockerfileParser.g4`: Parser rules.
-- `test.dockerfile`: A sample Dockerfile for testing.
+- `DockerfileLexer.g4`, `DockerfileParser.g4`: Dockerfile grammar.
+- `DockerComposeLexer.g4`, `DockerComposeParser.g4`: Docker Compose grammar.
+- `test.dockerfile`, `test-compose.yml`: Sample files for testing.
 - `tests/`: Directory with additional test cases.
 
 ## How to use
@@ -23,16 +28,22 @@ This project provides a comprehensive ANTLR4 grammar for Dockerfiles.
 1.  **Generate Parser/Lexer:**
     ```bash
     antlr4 DockerfileLexer.g4 DockerfileParser.g4
+    antlr4 DockerComposeLexer.g4 DockerComposeParser.g4
     ```
 
 2.  **Compile:**
     ```bash
-    javac -cp "/path/to/antlr-4.x-complete.jar:." Dockerfile*.java
+    javac -cp "/path/to/antlr-4.x-complete.jar:." Docker*.java
     ```
 
-3.  **Test:**
+3.  **Test Dockerfile:**
     ```bash
     java -cp "/path/to/antlr-4.x-complete.jar:." org.antlr.v4.gui.TestRig Dockerfile dockerfile -tree test.dockerfile
+    ```
+
+4.  **Test Docker Compose:**
+    ```bash
+    java -cp "/path/to/antlr-4.x-complete.jar:." org.antlr.v4.gui.TestRig DockerCompose composeFile -tree test-compose.yml
     ```
 
 ## Grammar Design

@@ -7,18 +7,25 @@ if [ ! -f "$ANTLR_JAR" ]; then
     exit 1
 fi
 
-echo "Generating Lexer and Parser..."
+echo "Generating Lexer and Parser for Dockerfile..."
 antlr4 DockerfileLexer.g4 DockerfileParser.g4
+echo "Generating Lexer and Parser for DockerCompose..."
+antlr4 DockerComposeLexer.g4 DockerComposeParser.g4
 
 echo "Compiling Java files..."
-javac -cp "$ANTLR_JAR:." Dockerfile*.java
+javac -cp "$ANTLR_JAR:." Docker*.java
 
-echo "Running tests..."
+echo "Running Dockerfile tests..."
 for f in tests/*.dockerfile test.dockerfile; do
     echo "----------------------------------------"
     echo "Testing $f..."
     java -cp "$ANTLR_JAR:." org.antlr.v4.gui.TestRig Dockerfile dockerfile -tree "$f"
 done
+
+echo "Running DockerCompose tests..."
+echo "----------------------------------------"
+echo "Testing test-compose.yml..."
+java -cp "$ANTLR_JAR:." org.antlr.v4.gui.TestRig DockerCompose composeFile -tree test-compose.yml
 
 echo "----------------------------------------"
 echo "Tests completed."
