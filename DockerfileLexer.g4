@@ -29,8 +29,12 @@ mode MODE_COMMENT;
     COMMENT_NL: ( '\r'? '\n' | '\r' ) -> mode(DEFAULT_MODE), type(NL);
 
 mode MODE_ARGS;
+    // Handle line continuation: \ followed by optional whitespace and a newline
     LINE_CONT: '\\' [ \t]* ( '\r'? '\n' | '\r' ) -> skip;
     
+    // Newline ends the instruction and returns to DEFAULT_MODE
+    ARGS_NL: [ \t]* ( '\r'? '\n' | '\r' ) -> mode(DEFAULT_MODE), type(NL);
+
     LBRACKET: '[';
     RBRACKET: ']';
     COMMA: ',';
@@ -39,9 +43,10 @@ mode MODE_ARGS;
     NONE: [nN][oO][nN][eE];
     CMD_IN_ARGS: [cC][mM][dD] -> type(CMD);
     
-    ARG_TEXT: ~[\r\n \t[\] ,"'#]+;
+    ARG_TEXT: ~[\r\n \t[\] ,"'#\\]+;
     ARG_WS: [ \t]+ -> skip;
     
     ARG_HASH: '#' -> type(ARG_TEXT);
-
-    ARGS_NL: ( '\r'? '\n' | '\r' ) -> mode(DEFAULT_MODE), type(NL);
+    ARG_BACKSLASH: '\\' -> type(ARG_TEXT);
+    
+    ANY_OTHER: . -> type(ARG_TEXT);
