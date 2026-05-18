@@ -1,0 +1,17 @@
+# ANTLR generated files
+DockerfileLexer.java
+DockerfileParser.java
+DockerfileBaseListener.java
+DockerfileListener.java
+DockerfileLexer.tokens
+DockerfileParser.tokens
+DockerfileLexer.interp
+DockerfileParser.interp
+*.tokens
+*.interp
+
+# Java class files
+*.class
+
+# OS files
+.DS_Store
