@@ -2,6 +2,7 @@ lexer grammar DockerComposeLexer;
 
 @header {
     import org.antlr.v4.runtime.*;
+    import org.antlr.v4.runtime.misc.Pair;
     import java.util.*;
 }
 
@@ -66,25 +67,24 @@ lexer grammar DockerComposeLexer;
     }
 
     private Token createToken(int type, String text, Token parent) {
-        CommonToken t = new CommonToken(type, text);
+        Pair<TokenSource, CharStream> source = new Pair<>(this, _input);
+        CommonToken t = new CommonToken(source, type, parent.getChannel(), parent.getStartIndex(), parent.getStopIndex());
+        t.setText(text);
         t.setLine(parent.getLine());
         t.setCharPositionInLine(parent.getCharPositionInLine());
-        t.setStartIndex(parent.getStartIndex());
-        t.setStopIndex(parent.getStopIndex());
         return t;
     }
 }
 
-COLON: ':' { Character.isWhitespace((char)_input.LA(1)) || _input.LA(1) == EOF }?;
-DASH: '-' { Character.isWhitespace((char)_input.LA(1)) || _input.LA(1) == EOF }?;
+COLON: ':' { Character.isWhitespace((char)_input.LA(1)) || _input.LA(1) == EOF || _input.LA(1) == '\r' || _input.LA(1) == '\n' }?;
+DASH: '-' { Character.isWhitespace((char)_input.LA(1)) || _input.LA(1) == EOF || _input.LA(1) == '\r' || _input.LA(1) == '\n' }?;
 LBRACKET: '[';
 RBRACKET: ']';
-COMMA: ',';
+COMMA: ',' { Character.isWhitespace((char)_input.LA(1)) || _input.LA(1) == EOF || _input.LA(1) == '\r' || _input.LA(1) == '\n' }?;
 
 STRING: '"' ( ~["\\] | '\\' . )* '"' | '\'' ( ~['\\] | '\\' . )* '\'';
 
-// SCALAR: Match anything that is not one of the separators
-SCALAR: (~[ \t\r\n:#[\],\-]|(':' ~[ \t\r\n])|('-' ~[ \t\r\n]))+;
+SCALAR: (~[ \t\r\n#[\],\-]|(':' ~[ \t\r\n])|('-' ~[ \t\r\n])|(',' ~[ \t\r\n]))+;
 
 COMMENT: '#' ~[\r\n]* -> skip;
 
@@ -94,6 +94,4 @@ NEWLINE: ( '\r'? '\n' | '\r' )+;
 INDENT: { false }? 'INDENT';
 DEDENT: { false }? 'DEDENT';
 
-// Fallback for when COLON/DASH predicates fail (they should be part of SCALAR)
-// But since SCALAR is greedy and comes later, we might need a catch-all if SCALAR misses something.
 ANY_CHAR: . -> type(SCALAR);
