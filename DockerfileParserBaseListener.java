@@ -40,18 +40,6 @@ public class DockerfileParserBaseListener implements DockerfileParserListener {
 	 *
 	 * <p>The default implementation does nothing.</p>
 	 */
-	@Override public void enterComment(DockerfileParser.CommentContext ctx) { }
-	/**
-	 * {@inheritDoc}
-	 *
-	 * <p>The default implementation does nothing.</p>
-	 */
-	@Override public void exitComment(DockerfileParser.CommentContext ctx) { }
-	/**
-	 * {@inheritDoc}
-	 *
-	 * <p>The default implementation does nothing.</p>
-	 */
 	@Override public void enterInstruction(DockerfileParser.InstructionContext ctx) { }
 	/**
 	 * {@inheritDoc}

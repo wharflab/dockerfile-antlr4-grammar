@@ -1,6 +1,7 @@
 lexer grammar DockerfileLexer;
 
-// Keywords at the start of a line (DEFAULT_MODE)
+// DEFAULT_MODE: Recognition of instruction keywords and comments at line start
+
 FROM: [fF][rR][oO][mM] -> mode(MODE_ARGS);
 RUN: [rR][uU][nN] -> mode(MODE_ARGS);
 CMD: [cC][mM][dD] -> mode(MODE_ARGS);
@@ -19,34 +20,51 @@ STOPSIGNAL: [sS][tT][oO][pP][sS][iI][gG][nN][aA][lL] -> mode(MODE_ARGS);
 HEALTHCHECK: [hH][eE][aA][lL][tT][hH][cC][hH][eE][cC][kK] -> mode(MODE_ARGS);
 SHELL: [sS][hH][eE][lL][lL] -> mode(MODE_ARGS);
 
-CHASH: '#' -> mode(MODE_COMMENT);
+// Top-level comments
+COMMENT: [ \t]* '#' ~[\r\n]* -> skip;
 
 NL: ( '\r'? '\n' | '\r' )+;
 WS: [ \t]+ -> skip;
 
-mode MODE_COMMENT;
-    COMMENT_TEXT: ~[\r\n]+;
-    COMMENT_NL: ( '\r'? '\n' | '\r' ) -> mode(DEFAULT_MODE), type(NL);
-
 mode MODE_ARGS;
-    // Handle line continuation: \ followed by optional whitespace and a newline
-    LINE_CONT: '\\' [ \t]* ( '\r'? '\n' | '\r' ) -> skip;
-    
-    // Newline ends the instruction and returns to DEFAULT_MODE
-    ARGS_NL: [ \t]* ( '\r'? '\n' | '\r' ) -> mode(DEFAULT_MODE), type(NL);
+    // 1. Line continuation: \ followed by optional whitespace and newline
+    ARG_LINE_CONT: '\\' [ \t]* ( '\r'? '\n' | '\r' ) -> skip;
 
+    // 2. Comments inside instructions: only at the start of a line
+    // We match the newline of the previous line IF it wasn't escaped,
+    // OR we rely on the fact that if it was escaped, position is 0.
+    // Actually, if it was escaped, it was skipped, so position IS 0.
+    // If it WASN'T escaped, then ARG_NL would have triggered.
+    // So this rule only matches if the previous line ended with \.
+    ARG_COMMENT: { getCharPositionInLine() == 0 }? [ \t]* '#' ~[\r\n]* ( '\r'? '\n' | '\r' ) -> skip;
+
+    // 3. Newline: actual end of instruction
+    ARG_NL: [ \t]* ( '\r'? '\n' | '\r' ) -> mode(DEFAULT_MODE), type(NL);
+
+    // 4. JSON-like structures for exec form
     LBRACKET: '[';
     RBRACKET: ']';
     COMMA: ',';
+    
+    // 5. Strings
     STRING: '"' ( ~["\\] | '\\' . )* '"' | '\'' ( ~['\\] | '\\' . )* '\'';
     
-    NONE: [nN][oO][nN][eE];
-    CMD_IN_ARGS: [cC][mM][dD] -> type(CMD);
-    
+    // 6. Keywords that might appear in arguments (e.g. CMD in HEALTHCHECK)
+    // We reuse the token types from DEFAULT_MODE if they appear here.
+    ARG_NONE: [nN][oO][nN][eE] -> type(NONE);
+    ARG_CMD: [cC][mM][dD] -> type(CMD);
+
+    // 7. General text
+    // Greedy match for most characters. Stop at anything that might have special meaning.
     ARG_TEXT: ~[\r\n \t[\] ,"'#\\]+;
-    ARG_WS: [ \t]+ -> skip;
     
+    // Whitespace within arguments
+    ARG_WS: [ \t]+ -> skip;
+
+    // 8. Fallbacks for single special characters
     ARG_HASH: '#' -> type(ARG_TEXT);
     ARG_BACKSLASH: '\\' -> type(ARG_TEXT);
-    
     ANY_OTHER: . -> type(ARG_TEXT);
+
+// Token types for reuse
+NONE: [nN][oO][nN][eE];

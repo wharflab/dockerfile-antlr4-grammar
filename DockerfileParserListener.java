@@ -27,16 +27,6 @@ public interface DockerfileParserListener extends ParseTreeListener {
 	 */
 	void exitElement(DockerfileParser.ElementContext ctx);
 	/**
-	 * Enter a parse tree produced by {@link DockerfileParser#comment}.
-	 * @param ctx the parse tree
-	 */
-	void enterComment(DockerfileParser.CommentContext ctx);
-	/**
-	 * Exit a parse tree produced by {@link DockerfileParser#comment}.
-	 * @param ctx the parse tree
-	 */
-	void exitComment(DockerfileParser.CommentContext ctx);
-	/**
 	 * Enter a parse tree produced by {@link DockerfileParser#instruction}.
 	 * @param ctx the parse tree
 	 */

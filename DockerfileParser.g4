@@ -6,11 +6,10 @@ dockerfile: (element)* EOF;
 
 element
     : instruction
-    | comment
     | NL
     ;
 
-comment: CHASH COMMENT_TEXT? NL;
+// Top-level comments are skipped by the lexer
 
 instruction
     : from_inst
