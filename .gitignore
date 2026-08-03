@@ -3,6 +3,9 @@ gen/
 *.tokens
 *.interp
 
+# ANTLR tool downloaded by scripts/run_tests.sh (jar + isolated Maven repo)
+.antlr/
+
 # Java class files
 *.class
 
