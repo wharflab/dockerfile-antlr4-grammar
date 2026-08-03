@@ -5,13 +5,10 @@ This project provides a comprehensive ANTLR4 grammar for Dockerfiles.
 ## Features
 
 - **Dockerfile Support:**
-    - Lexer Modes for instructions/arguments.
-    - Robust shell command parsing.
-    - Recursive `ONBUILD` and `HEALTHCHECK CMD`.
-- **Docker Compose Support:**
-    - Indentation-aware Lexer (stack-based INDENT/DEDENT).
-    - Semantic predicates for separator vs. scalar disambiguation (handles `image: tag-name`, `host:port`, etc.).
-    - Support for nested blocks, lists (block and flow), and key-value pairs.
+  - Lexer Modes for instructions/arguments.
+  - Robust shell command parsing.
+  - Recursive `ONBUILD` and `HEALTHCHECK CMD`.
+  - Support for nested blocks, lists (block and flow), and key-value pairs.
 - **Form Support:** Handles both shell form and exec form (`[...]`) for instructions.
 - **Line Continuations:** Correctly handles multi-line instructions using `\` continuation character.
 - **Comments:** Supports single-line comments starting with `#`.
@@ -19,31 +16,27 @@ This project provides a comprehensive ANTLR4 grammar for Dockerfiles.
 ## Files
 
 - `DockerfileLexer.g4`, `DockerfileParser.g4`: Dockerfile grammar.
-- `DockerComposeLexer.g4`, `DockerComposeParser.g4`: Docker Compose grammar.
-- `test.dockerfile`, `test-compose.yml`: Sample files for testing.
+- `test.dockerfile`: Sample files for testing.
 - `tests/`: Directory with additional test cases.
 
 ## How to use
 
 1.  **Generate Parser/Lexer:**
+
     ```bash
     antlr4 DockerfileLexer.g4 DockerfileParser.g4
-    antlr4 DockerComposeLexer.g4 DockerComposeParser.g4
     ```
 
 2.  **Compile:**
+
     ```bash
     javac -cp "/path/to/antlr-4.x-complete.jar:." Docker*.java
     ```
 
 3.  **Test Dockerfile:**
+
     ```bash
     java -cp "/path/to/antlr-4.x-complete.jar:." org.antlr.v4.gui.TestRig Dockerfile dockerfile -tree test.dockerfile
-    ```
-
-4.  **Test Docker Compose:**
-    ```bash
-    java -cp "/path/to/antlr-4.x-complete.jar:." org.antlr.v4.gui.TestRig DockerCompose composeFile -tree test-compose.yml
     ```
 
 ## Grammar Design

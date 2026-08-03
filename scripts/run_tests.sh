@@ -30,12 +30,5 @@ for f in "$TESTS_DIR"/*.dockerfile; do
     java -cp "$ANTLR_JAR:$GEN_DIR:." org.antlr.v4.gui.TestRig Dockerfile dockerfile -tree "$f"
 done
 
-echo "Running DockerCompose tests..."
-for f in "$TESTS_DIR"/*.yml; do
-    echo "----------------------------------------"
-    echo "Testing $f..."
-    java -cp "$ANTLR_JAR:$GEN_DIR:." org.antlr.v4.gui.TestRig DockerCompose composeFile -tree "$f"
-done
-
 echo "----------------------------------------"
 echo "Tests completed."
