@@ -61,4 +61,4 @@ jobs:
           command -v shellcheck >/dev/null 2>&1 || {
             sudo apt-get update && sudo apt-get install -y shellcheck
           }
-          shellcheck scripts/run_tests.sh
+          shellcheck scripts/*.sh

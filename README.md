@@ -47,6 +47,35 @@ non-zero, reporting which fixtures failed.
 
 The same script runs in CI on every pull request (`.github/workflows/tests.yml`).
 
+## Compare with BuildKit
+
+`scripts/compare_ast.sh` compares this grammar with the official parser from
+BuildKit's `frontend/dockerfile/parser` Go package:
+
+```bash
+scripts/compare_ast.sh testdata/ast-parity/basic.dockerfile
+scripts/compare_ast.sh --keep .ast-diff tests/*.dockerfile
+```
+
+The adapters project both parser-specific trees into a common JSON document:
+instruction name, text or JSON arguments, builder flags, `ONBUILD` children,
+heredocs, escape directive, and source lines. Comments and parser warnings are
+not part of the comparison. A unified JSON diff is printed for every mismatch;
+`--keep` retains both projections and their diagnostics.
+
+The command exits `0` when all ASTs match or both parsers reject an input, `1`
+for an acceptance or AST difference, and `2` for a tooling failure. In addition
+to the Java and Maven requirements above, it requires Go at the version declared
+in `tools/buildkit-ast/go.mod`. The BuildKit dependency is pinned there so
+comparisons are reproducible.
+
+CI runs the strict comparison over every fixture. Any acceptance or AST
+difference fails the workflow.
+
+`testdata/ast-parity/heredoc.dockerfile` is an intentional mismatch corpus:
+BuildKit accepts it and attaches the heredoc to the `RUN` node, while the
+current ANTLR grammar rejects the heredoc body.
+
 ## Grammar Design
 
 The grammar uses a `DEFAULT_MODE` to recognize instruction keywords at the start of a line. Once a keyword is found, it switches to `MODE_ARGS` to consume the rest of the line as arguments. This ensures that keywords like `RUN` or `CMD` appearing inside a shell command are treated as literal text rather than new instructions.
