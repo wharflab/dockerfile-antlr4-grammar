@@ -43,6 +43,13 @@ case "${1:-}" in
     *) printf 'Usage: %s [-t|--tree]\n' "$(basename "$0")" >&2; exit 2 ;;
 esac
 
+# The Java launcher announces these on stderr for every JVM it starts ("Picked up
+# JAVA_TOOL_OPTIONS: ...", and "NOTE: Picked up JDK_JAVA_OPTIONS: ..."). Parse
+# failures are detected via stderr below, so an inherited value here would make
+# every fixture report a spurious failure. Drop them for the JVMs we launch;
+# use ANTLR_VERSION or edit this script if JVM tuning is genuinely needed.
+unset JAVA_TOOL_OPTIONS _JAVA_OPTIONS JDK_JAVA_OPTIONS
+
 # --- Helpers -----------------------------------------------------------------
 
 die() { printf '\nERROR: %s\n' "$*" >&2; exit 1; }
@@ -153,9 +160,9 @@ done
 #
 # -encoding UTF-8 is explicit because TestRig otherwise decodes with the JVM
 # default charset, which varies with the runner's locale (on JDK 17 under LANG=C
-# it degrades to ASCII). Do NOT set this via JAVA_TOOL_OPTIONS instead: the JVM
-# announces "Picked up JAVA_TOOL_OPTIONS:" on stderr, which this check reads as a
-# failure for every fixture.
+# it degrades to ASCII). Note this must be TestRig's own flag, not
+# -Dfile.encoding via JAVA_TOOL_OPTIONS, which the launcher echoes to stderr
+# (hence the unset above).
 echo "Parsing fixtures in ${TESTS_DIR#"$REPO_ROOT"/}/..."
 
 pass=0
@@ -173,18 +180,22 @@ shopt -u nullglob
 for f in "${fixtures[@]}"; do
     name="$(basename "$f")"
 
+    rc=0
     if [ -n "$SHOW_TREE" ]; then
         java -cp "$ANTLR_JAR:$GEN_DIR" org.antlr.v4.gui.TestRig \
-            Dockerfile dockerfile -encoding UTF-8 -tree "$f" 2>"$stderr_file" || true
+            Dockerfile dockerfile -encoding UTF-8 -tree "$f" 2>"$stderr_file" || rc=$?
     else
         java -cp "$ANTLR_JAR:$GEN_DIR" org.antlr.v4.gui.TestRig \
-            Dockerfile dockerfile -encoding UTF-8 "$f" >/dev/null 2>"$stderr_file" || true
+            Dockerfile dockerfile -encoding UTF-8 "$f" >/dev/null 2>"$stderr_file" || rc=$?
     fi
 
-    if [ -s "$stderr_file" ]; then
+    # Fail on parse diagnostics (stderr, exit 0) or on the JVM itself dying
+    # (nonzero exit, possibly with no stderr at all -- e.g. an OOM kill).
+    if [ -s "$stderr_file" ] || [ "$rc" -ne 0 ]; then
         fail=$((fail + 1))
         failed_files="$failed_files  $name"$'\n'
         printf '  FAIL  %s\n' "$name"
+        [ "$rc" -eq 0 ] || printf '          (java exited %s)\n' "$rc"
         sed 's/^/          /' "$stderr_file"
     else
         pass=$((pass + 1))

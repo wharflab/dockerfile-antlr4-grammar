@@ -17,9 +17,12 @@ jobs:
   grammar:
     name: Parse fixtures
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       # All Java here is ANTLR-generated and compiled from source on every run,
       # so there is no bytecode-compatibility surface to test across JDKs.
@@ -46,8 +49,11 @@ jobs:
   shellcheck:
     name: Lint shell scripts
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       # Preinstalled on current ubuntu-latest images, but install if absent so the
       # job does not silently depend on the runner image's package list.
       - name: Run shellcheck
