@@ -52,3 +52,7 @@ The same script runs in CI on every pull request (`.github/workflows/tests.yml`)
 The grammar uses a `DEFAULT_MODE` to recognize instruction keywords at the start of a line. Once a keyword is found, it switches to `MODE_ARGS` to consume the rest of the line as arguments. This ensures that keywords like `RUN` or `CMD` appearing inside a shell command are treated as literal text rather than new instructions.
 
 `HEALTHCHECK` and `ONBUILD` are handled specially to allow recursive instruction recognition (e.g., `HEALTHCHECK CMD ...`).
+
+## License
+
+BSD 3-Clause. See [LICENSE](LICENSE).
