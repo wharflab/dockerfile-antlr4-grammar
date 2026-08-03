@@ -19,12 +19,12 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # All Java here is ANTLR-generated and compiled from source on every run,
       # so there is no bytecode-compatibility surface to test across JDKs.
       - name: Set up JDK
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '25'
@@ -32,7 +32,7 @@ jobs:
       # scripts/run_tests.sh fetches ANTLR into .antlr/m2, so cache that rather
       # than the default ~/.m2 keyed on pom.xml (this repo has no pom).
       - name: Cache ANTLR tool
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: .antlr
           key: antlr-${{ runner.os }}-${{ hashFiles('scripts/run_tests.sh') }}
@@ -47,7 +47,7 @@ jobs:
     name: Lint shell scripts
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # Preinstalled on current ubuntu-latest images, but install if absent so the
       # job does not silently depend on the runner image's package list.
       - name: Run shellcheck
