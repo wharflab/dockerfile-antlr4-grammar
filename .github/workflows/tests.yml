@@ -1,0 +1,64 @@
+name: tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Cancel superseded runs on the same branch/PR so pushes don't queue up.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  grammar:
+    name: Parse fixtures
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # All Java here is ANTLR-generated and compiled from source on every run,
+      # so there is no bytecode-compatibility surface to test across JDKs.
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      # scripts/run_tests.sh fetches ANTLR into .antlr/m2, so cache that rather
+      # than the default ~/.m2 keyed on pom.xml (this repo has no pom).
+      - name: Cache ANTLR tool
+        uses: actions/cache@v6
+        with:
+          path: .antlr
+          key: antlr-${{ runner.os }}-${{ hashFiles('scripts/run_tests.sh') }}
+
+      # Encoding is pinned inside the script via TestRig's -encoding flag, so no
+      # JAVA_TOOL_OPTIONS here -- the JVM would echo "Picked up JAVA_TOOL_OPTIONS"
+      # to stderr, which the script reads as a parse failure.
+      - name: Run grammar tests
+        run: ./scripts/run_tests.sh
+
+  shellcheck:
+    name: Lint shell scripts
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      # Preinstalled on current ubuntu-latest images, but install if absent so the
+      # job does not silently depend on the runner image's package list.
+      - name: Run shellcheck
+        run: |
+          command -v shellcheck >/dev/null 2>&1 || {
+            sudo apt-get update && sudo apt-get install -y shellcheck
+          }
+          shellcheck scripts/run_tests.sh

@@ -15,29 +15,37 @@ This project provides a comprehensive ANTLR4 grammar for Dockerfiles.
 
 ## Files
 
-- `DockerfileLexer.g4`, `DockerfileParser.g4`: Dockerfile grammar.
-- `test.dockerfile`: Sample files for testing.
-- `tests/`: Directory with additional test cases.
+- `grammars/DockerfileLexer.g4`, `grammars/DockerfileParser.g4`: Dockerfile grammar.
+- `tests/`: Dockerfile fixtures used as test cases, including several large official images.
+- `scripts/run_tests.sh`: Generates the parser, compiles it, and parses every fixture.
 
 ## How to use
 
-1.  **Generate Parser/Lexer:**
+Requirements: a JDK (`java` + `javac`) and Maven. Everything else is handled by the script.
 
-    ```bash
-    antlr4 DockerfileLexer.g4 DockerfileParser.g4
-    ```
+```bash
+scripts/run_tests.sh          # generate, compile, and parse all fixtures
+scripts/run_tests.sh -t       # same, but also print each parse tree
+```
 
-2.  **Compile:**
+The script downloads the pinned ANTLR version from Maven Central into `.antlr/`
+(git-ignored) and verifies its SHA-256 before use. That download uses an isolated,
+in-repo Maven repository rather than the shared `~/.m2`, so results do not depend on
+what a given machine happens to have cached. The first run fetches the tool; later
+runs need no network.
 
-    ```bash
-    javac -cp "/path/to/antlr-4.x-complete.jar:." Docker*.java
-    ```
+To use a different ANTLR version, set `ANTLR_VERSION` (note that only the pinned
+default is checksum-verified):
 
-3.  **Test Dockerfile:**
+```bash
+ANTLR_VERSION=4.13.1 scripts/run_tests.sh
+```
 
-    ```bash
-    java -cp "/path/to/antlr-4.x-complete.jar:." org.antlr.v4.gui.TestRig Dockerfile dockerfile -tree test.dockerfile
-    ```
+A fixture passes when it parses with no lexer or parser diagnostics. `TestRig` exits `0`
+even on syntax errors, so the script treats any error output as a failure and exits
+non-zero, reporting which fixtures failed.
+
+The same script runs in CI on every pull request (`.github/workflows/tests.yml`).
 
 ## Grammar Design
 
