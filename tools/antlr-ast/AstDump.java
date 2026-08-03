@@ -3,10 +3,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
-import java.util.Set;
 import java.util.regex.Pattern;
 
 import org.antlr.v4.runtime.BaseErrorListener;
@@ -23,12 +21,10 @@ public final class AstDump {
         Pattern.compile("\\\\[ \\t]*(?:\\r?\\n|\\r)");
     private static final Pattern CONTINUATION_COMMENT =
         Pattern.compile("(?m)^[ \\t]*#[^\\r\\n]*(?:\\r?\\n|\\r|\\n)");
-    private static final Pattern PARSER_DIRECTIVE =
-        Pattern.compile("^([a-zA-Z][a-zA-Z0-9]*)\\s*=\\s*(.+?)\\s*$");
-    private static final Set<String> VALID_DIRECTIVES = Set.of("syntax", "escape", "check");
+    // DockerfileLexer.g4 treats parser directives as comments and only supports '\'.
+    private static final char GRAMMAR_ESCAPE_TOKEN = '\\';
 
     private static String source;
-    private static char escapeToken;
     private static int[] codePointOffsets;
     private static CommonTokenStream tokens;
 
@@ -44,7 +40,6 @@ public final class AstDump {
         Path input = Path.of(args[0]);
         try {
             source = Files.readString(input, StandardCharsets.UTF_8);
-            escapeToken = escapeToken(source);
             codePointOffsets = codePointOffsets(source);
         } catch (IOException error) {
             System.err.printf("%s: %s%n", input, error.getMessage());
@@ -70,7 +65,7 @@ public final class AstDump {
             System.exit(1);
         }
 
-        Document document = new Document(escapeToken);
+        Document document = new Document();
         for (DockerfileParser.ElementContext element : tree.element()) {
             if (element.instruction() != null) {
                 document.instructions.add(toInstruction(element.instruction()));
@@ -157,7 +152,7 @@ public final class AstDump {
             result.append(logicalTokenText(token.getText()));
             previous = token;
         }
-        return normalizeText(result.toString(), escapeToken);
+        return normalizeText(result.toString());
     }
 
     private static boolean hasLogicalGap(Token previous, Token current) {
@@ -192,46 +187,7 @@ public final class AstDump {
         return offsets;
     }
 
-    private static char escapeToken(String value) {
-        char result = '\\';
-        Set<String> seen = new HashSet<>();
-        String[] lines = value.split("\\n", -1);
-
-        for (int index = 0; index < lines.length; index++) {
-            String line = lines[index];
-            if (index == 0 && line.startsWith("\uFEFF")) {
-                line = line.substring(1);
-            }
-            line = line.stripLeading();
-            if (line.endsWith("\r")) {
-                line = line.substring(0, line.length() - 1);
-            }
-            if (!line.startsWith("#")) {
-                break;
-            }
-
-            java.util.regex.Matcher directive =
-                PARSER_DIRECTIVE.matcher(line.substring(1).stripLeading());
-            if (!directive.matches()) {
-                break;
-            }
-
-            String name = directive.group(1).toLowerCase(Locale.ROOT);
-            if (!VALID_DIRECTIVES.contains(name) || !seen.add(name)) {
-                break;
-            }
-            if ("escape".equals(name)) {
-                String token = directive.group(2);
-                if ("\\".equals(token) || "`".equals(token)) {
-                    result = token.charAt(0);
-                }
-            }
-        }
-
-        return result;
-    }
-
-    private static String normalizeText(String value, char escape) {
+    private static String normalizeText(String value) {
         StringBuilder result = new StringBuilder();
         char quote = 0;
         boolean escaped = false;
@@ -245,7 +201,7 @@ public final class AstDump {
                 escaped = false;
                 continue;
             }
-            if (current == escape && quote != '\'') {
+            if (current == GRAMMAR_ESCAPE_TOKEN && quote != '\'') {
                 if (pendingSpace && result.length() > 0) {
                     result.append(' ');
                     pendingSpace = false;
@@ -387,12 +343,8 @@ public final class AstDump {
     }
 
     private static final class Document {
-        private final String escape;
+        private final String escape = Character.toString(GRAMMAR_ESCAPE_TOKEN);
         private final List<Instruction> instructions = new ArrayList<>();
-
-        private Document(char escape) {
-            this.escape = Character.toString(escape);
-        }
     }
 
     private static final class Instruction {

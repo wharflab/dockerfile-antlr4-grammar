@@ -59,9 +59,9 @@ scripts/compare_ast.sh --keep .ast-diff tests/*.dockerfile
 
 The adapters project both parser-specific trees into a common JSON document:
 instruction name, text or JSON arguments, builder flags, `ONBUILD` children,
-heredocs, escape directive, and source lines. Comments and parser warnings are
-not part of the comparison. A unified JSON diff is printed for every mismatch;
-`--keep` retains both projections and their diagnostics.
+heredocs, effective escape token, and source lines. Comments and parser warnings
+are not part of the comparison. A unified JSON diff is printed for every
+mismatch; `--keep` retains both projections and their diagnostics.
 
 The command exits `0` when all ASTs match or both parsers reject an input, `1`
 for an acceptance or AST difference, and `2` for a tooling failure. In addition
@@ -71,6 +71,11 @@ comparisons are reproducible.
 
 CI runs the strict comparison over every fixture. Any acceptance or AST
 difference fails the workflow.
+
+`tests/escape-directive.dockerfile` records that parser directives are currently
+comments to the ANTLR lexer: it retains the grammar's backslash escape token
+while BuildKit switches to backtick. The fixture remains in strict CI with no
+allowlist, so this unsupported feature is reported as a parity failure.
 
 `testdata/ast-parity/heredoc.dockerfile` is an intentional mismatch corpus:
 BuildKit accepts it and attaches the heredoc to the `RUN` node, while the
