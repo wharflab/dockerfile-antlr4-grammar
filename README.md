@@ -45,8 +45,7 @@ A fixture passes when it parses with no lexer or parser diagnostics. `TestRig` e
 even on syntax errors, so the script treats any error output as a failure and exits
 non-zero, reporting which fixtures failed.
 
-The same script runs in CI on every pull request, against JDK 17 and 21
-(`.github/workflows/tests.yml`).
+The same script runs in CI on every pull request (`.github/workflows/tests.yml`).
 
 ## Grammar Design
 
