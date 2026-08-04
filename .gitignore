@@ -9,5 +9,8 @@ gen/
 # Java class files
 *.class
 
+# Local AST parity comparison artifacts
+.ast-diff/
+
 # OS files
 .DS_Store

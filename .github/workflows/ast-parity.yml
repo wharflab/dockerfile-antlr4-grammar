@@ -1,0 +1,58 @@
+name: BuildKit AST parity
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  parity:
+    name: Compare all Dockerfile fixtures
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - name: Cache ANTLR tool
+        uses: actions/cache@v6
+        with:
+          path: .antlr
+          key: antlr-${{ runner.os }}-${{ hashFiles('scripts/run_tests.sh') }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: tools/buildkit-ast/go.mod
+          cache-dependency-path: tools/buildkit-ast/go.sum
+
+      - name: Compare ASTs
+        run: >-
+          ./scripts/compare_ast.sh
+          --keep .ast-diff
+          tests/*.dockerfile
+
+      - name: Upload parity artifacts
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: ast-parity-${{ github.run_id }}
+          path: .ast-diff/
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 7
