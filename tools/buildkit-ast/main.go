@@ -150,10 +150,30 @@ func argumentText(node *parser.Node, escape rune) string {
 	for range node.Flags {
 		line = consumeWord(line, escape)
 	}
-	if word, remaining := splitWord(line, escape); word == "--" {
-		line = remaining
+	if supportsBuilderFlags(node.Value) {
+		line = consumeBuilderFlagTerminator(line, escape)
 	}
 	return strings.TrimSpace(line)
+}
+
+func supportsBuilderFlags(command string) bool {
+	switch strings.ToLower(command) {
+	case "from", "run", "add", "copy", "healthcheck":
+		return true
+	default:
+		return false
+	}
+}
+
+func consumeBuilderFlagTerminator(value string, escape rune) string {
+	value = strings.TrimLeftFunc(value, unicode.IsSpace)
+	if !strings.HasPrefix(value, "--") {
+		return value
+	}
+	if word, remaining := splitWord(value, escape); word == "--" {
+		return remaining
+	}
+	return value
 }
 
 func consumeWord(value string, escape rune) string {

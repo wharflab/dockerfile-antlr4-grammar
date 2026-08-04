@@ -46,7 +46,8 @@ mode MODE_ARGS;
     BUILDER_FLAG_TERMINATOR: '--';
 
     fragment BUILDER_FLAG_PART
-        : ~[\r\n \t"'\\]
+        : ~[\r\n \t"'\\#]
+        | { getCharPositionInLine() > 0 }? '#'
         | BUILDER_FLAG_ESCAPE
         | '"' ( ~["\\\r\n] | BUILDER_FLAG_ESCAPE )* '"'
         | '\'' ( ~['\\\r\n] | BUILDER_FLAG_ESCAPE )* '\''
