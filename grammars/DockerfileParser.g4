@@ -32,7 +32,10 @@ instruction
     ;
 
 from_inst: FROM arguments NL;
-run_inst: RUN (json_array | arguments) NL;
+run_inst
+    : RUN builder_flags (json_array | arguments)? NL
+    | RUN (json_array | arguments) NL
+    ;
 cmd_inst: CMD (json_array | arguments) NL;
 label_inst: LABEL arguments NL;
 expose_inst: EXPOSE arguments NL;
@@ -52,6 +55,23 @@ healthcheck_inst
     ;
 shell_inst: SHELL json_array NL;
 
+builder_flags
+    : BUILDER_FLAG+ BUILDER_FLAG_TERMINATOR?
+    | BUILDER_FLAG_TERMINATOR
+    ;
+
 json_array: LBRACKET (STRING (COMMA STRING)*)? RBRACKET;
 
-arguments: (ARG_TEXT | STRING | LBRACKET | RBRACKET | COMMA | NONE | CMD)+;
+arguments
+    : (
+        ARG_TEXT
+        | BUILDER_FLAG
+        | BUILDER_FLAG_TERMINATOR
+        | STRING
+        | LBRACKET
+        | RBRACKET
+        | COMMA
+        | NONE
+        | CMD
+      )+
+    ;

@@ -41,27 +41,42 @@ mode MODE_ARGS;
     // 3. Newline: actual end of instruction
     ARG_NL: [ \t]* ( '\r'? '\n' | '\r' ) -> mode(DEFAULT_MODE), type(NL);
 
-    // 4. JSON-like structures for exec form
+    // 4. Leading builder flags (parsed structurally by instructions that support them)
+    BUILDER_FLAG: '--' BUILDER_FLAG_PART+;
+    BUILDER_FLAG_TERMINATOR: '--';
+
+    fragment BUILDER_FLAG_PART
+        : ~[\r\n \t"'\\]
+        | BUILDER_FLAG_ESCAPE
+        | '"' ( ~["\\\r\n] | BUILDER_FLAG_ESCAPE )* '"'
+        | '\'' ( ~['\\\r\n] | BUILDER_FLAG_ESCAPE )* '\''
+        ;
+
+    fragment BUILDER_FLAG_ESCAPE
+        : '\\' ( [ \t]* ( '\r'? '\n' | '\r' ) | . )?
+        ;
+
+    // 5. JSON-like structures for exec form
     LBRACKET: '[';
     RBRACKET: ']';
     COMMA: ',';
     
-    // 5. Strings
+    // 6. Strings
     STRING: '"' ( ~["\\] | '\\' . )* '"' | '\'' ( ~['\\] | '\\' . )* '\'';
     
-    // 6. Keywords that might appear in arguments (e.g. CMD in HEALTHCHECK)
+    // 7. Keywords that might appear in arguments (e.g. CMD in HEALTHCHECK)
     // We reuse the token types from DEFAULT_MODE if they appear here.
     ARG_NONE: [nN][oO][nN][eE] -> type(NONE);
     ARG_CMD: [cC][mM][dD] -> type(CMD);
 
-    // 7. General text
+    // 8. General text
     // Greedy match for most characters. Stop at anything that might have special meaning.
     ARG_TEXT: ~[\r\n \t[\] ,"'#\\]+;
     
     // Whitespace within arguments
     ARG_WS: [ \t]+ -> skip;
 
-    // 8. Fallbacks for single special characters
+    // 9. Fallbacks for single special characters
     ARG_HASH: '#' -> type(ARG_TEXT);
     ARG_BACKSLASH: '\\' -> type(ARG_TEXT);
     ANY_OTHER: . -> type(ARG_TEXT);

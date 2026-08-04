@@ -93,6 +93,18 @@ public final class AstDump {
             context.getStop().getLine()
         );
 
+        Token argumentStart = commandToken;
+        DockerfileParser.Builder_flagsContext builderFlags = directBuilderFlags(context);
+        if (builderFlags != null) {
+            for (TerminalNode flag : builderFlags.BUILDER_FLAG()) {
+                String value = decodeBuilderFlag(flag.getText());
+                if (!"--".equals(value)) {
+                    instruction.flags.add(value);
+                }
+            }
+            argumentStart = builderFlags.getStop();
+        }
+
         DockerfileParser.Json_arrayContext json = directJsonArray(context);
         if (json != null) {
             instruction.argumentKind = "json";
@@ -103,7 +115,7 @@ public final class AstDump {
             instruction.arguments = values;
         } else {
             instruction.argumentKind = "text";
-            instruction.arguments = argumentText(commandToken, context.getStop());
+            instruction.arguments = argumentText(argumentStart, context.getStop());
         }
 
         if ("onbuild".equals(instruction.command)) {
@@ -115,6 +127,20 @@ public final class AstDump {
         }
 
         return instruction;
+    }
+
+    private static DockerfileParser.Builder_flagsContext directBuilderFlags(
+        org.antlr.v4.runtime.ParserRuleContext context
+    ) {
+        if (context.children == null) {
+            return null;
+        }
+        for (ParseTree child : context.children) {
+            if (child instanceof DockerfileParser.Builder_flagsContext) {
+                return (DockerfileParser.Builder_flagsContext) child;
+            }
+        }
+        return null;
     }
 
     private static DockerfileParser.Json_arrayContext directJsonArray(
@@ -235,6 +261,41 @@ public final class AstDump {
                 pendingSpace = false;
             }
             result.append(current);
+        }
+
+        return result.toString();
+    }
+
+    private static String decodeBuilderFlag(String token) {
+        String value = logicalTokenText(token);
+        StringBuilder result = new StringBuilder();
+        char quote = 0;
+        boolean escaped = false;
+
+        for (int index = 0; index < value.length(); index++) {
+            char current = value.charAt(index);
+            if (escaped) {
+                result.append(current);
+                escaped = false;
+                continue;
+            }
+            if (current == GRAMMAR_ESCAPE_TOKEN) {
+                escaped = true;
+                continue;
+            }
+            if (quote != 0) {
+                if (current == quote) {
+                    quote = 0;
+                } else {
+                    result.append(current);
+                }
+                continue;
+            }
+            if (current == '\'' || current == '"') {
+                quote = current;
+            } else {
+                result.append(current);
+            }
         }
 
         return result.toString();
