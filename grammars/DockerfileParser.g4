@@ -100,12 +100,21 @@ string_value
     | STRING_START STRING_TEXT* STRING_END
     ;
 
+unterminated_string_value
+    : STRING_START STRING_TEXT*
+    ;
+
+argument_string_value
+    : string_value
+    | unterminated_string_value
+    ;
+
 arguments
     : (
         ARG_TEXT
         | BUILDER_FLAG
         | BUILDER_FLAG_TERMINATOR
-        | string_value
+        | argument_string_value
         | LBRACKET
         | RBRACKET
         | COMMA

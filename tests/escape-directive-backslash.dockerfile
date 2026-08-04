@@ -14,3 +14,4 @@ RUN printf '%s\n' 'single quoted\
 continuation'
 RUN ["printf", "%s\n", "exec\
 continuation"]
+RUN printf '%s\n' \"literal

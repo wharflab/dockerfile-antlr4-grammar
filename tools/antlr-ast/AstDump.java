@@ -158,7 +158,9 @@ public final class AstDump {
         for (ParseTree child : context.children) {
             if (child instanceof TerminalNode) {
                 values.add(child.getText());
-            } else if (child instanceof DockerfileParser.String_valueContext) {
+            } else if (
+                child instanceof DockerfileParser.Argument_string_valueContext
+            ) {
                 values.add(child.getText());
             }
         }
