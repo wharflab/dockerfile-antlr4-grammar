@@ -11,7 +11,8 @@ This project provides a comprehensive ANTLR4 grammar for Dockerfiles.
   - Support for nested blocks, lists (block and flow), and key-value pairs.
 - **Form Support:** Handles both shell form and exec form (`[...]`) for instructions.
 - **Builder Flags:** Captures leading flags on `FROM`, `RUN`, `ADD`, `COPY`, and `HEALTHCHECK`.
-- **Line Continuations:** Correctly handles multi-line instructions using `\` continuation character.
+- **Parser Directives:** Honors top-of-file `# escape=\` and ``# escape=` `` directives.
+- **Line Continuations:** Uses the effective `\` or backtick escape character for multi-line instructions.
 - **Comments:** Supports single-line comments starting with `#`.
 
 ## Files
@@ -73,10 +74,9 @@ comparisons are reproducible.
 CI runs the strict comparison over every fixture. Any acceptance or AST
 difference fails the workflow.
 
-`tests/escape-directive.dockerfile` records that parser directives are currently
-comments to the ANTLR lexer: it retains the grammar's backslash escape token
-while BuildKit switches to backtick. The fixture remains in strict CI with no
-allowlist, so this unsupported feature is reported as a parity failure.
+The escape-directive fixtures cover directive scope, backtick continuations,
+escaped argument text, and builder flags. The effective escape token comes from
+the lexer and is included in the projected AST.
 
 `testdata/ast-parity/heredoc.dockerfile` is an intentional mismatch corpus:
 BuildKit accepts it and attaches the heredoc to the `RUN` node, while the

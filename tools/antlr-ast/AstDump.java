@@ -17,14 +17,12 @@ import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.TerminalNode;
 
 public final class AstDump {
-    private static final Pattern LINE_CONTINUATION =
-        Pattern.compile("\\\\[ \\t]*(?:\\r?\\n|\\r)");
     private static final Pattern CONTINUATION_COMMENT =
         Pattern.compile("(?m)^[ \\t]*#[^\\r\\n]*(?:\\r?\\n|\\r|\\n)");
-    // DockerfileLexer.g4 treats parser directives as comments and only supports '\'.
-    private static final char GRAMMAR_ESCAPE_TOKEN = '\\';
 
     private static String source;
+    private static char escapeToken;
+    private static Pattern lineContinuation;
     private static int[] codePointOffsets;
     private static CommonTokenStream tokens;
 
@@ -59,13 +57,18 @@ public final class AstDump {
 
         DockerfileParser.DockerfileContext tree = parser.dockerfile();
         tokens.fill();
+        escapeToken = lexer.getEscapeCharacter();
+        lineContinuation = Pattern.compile(
+            Pattern.quote(Character.toString(escapeToken))
+                + "[ \\t]*(?:\\r?\\n|\\r)"
+        );
 
         if (!diagnostics.messages.isEmpty()) {
             diagnostics.messages.forEach(System.err::println);
             System.exit(1);
         }
 
-        Document document = new Document();
+        Document document = new Document(escapeToken);
         for (DockerfileParser.ElementContext element : tree.element()) {
             if (element.instruction() != null) {
                 document.instructions.add(toInstruction(element.instruction()));
@@ -191,13 +194,13 @@ public final class AstDump {
         int charStart = codePointOffsets[start];
         int charEnd = codePointOffsets[Math.min(end, codePointOffsets.length - 1)];
         String gap = source.substring(charStart, charEnd);
-        gap = LINE_CONTINUATION.matcher(gap).replaceAll("");
+        gap = lineContinuation.matcher(gap).replaceAll("");
         gap = CONTINUATION_COMMENT.matcher(gap).replaceAll("");
         return !gap.isEmpty();
     }
 
     private static String logicalTokenText(String value) {
-        value = LINE_CONTINUATION.matcher(value).replaceAll("");
+        value = lineContinuation.matcher(value).replaceAll("");
         return CONTINUATION_COMMENT.matcher(value).replaceAll("");
     }
 
@@ -227,7 +230,7 @@ public final class AstDump {
                 escaped = false;
                 continue;
             }
-            if (current == GRAMMAR_ESCAPE_TOKEN && quote != '\'') {
+            if (current == escapeToken && quote != '\'') {
                 if (pendingSpace && result.length() > 0) {
                     result.append(' ');
                     pendingSpace = false;
@@ -279,7 +282,7 @@ public final class AstDump {
                 escaped = false;
                 continue;
             }
-            if (current == GRAMMAR_ESCAPE_TOKEN) {
+            if (current == escapeToken) {
                 escaped = true;
                 continue;
             }
@@ -404,8 +407,12 @@ public final class AstDump {
     }
 
     private static final class Document {
-        private final String escape = Character.toString(GRAMMAR_ESCAPE_TOKEN);
+        private final String escape;
         private final List<Instruction> instructions = new ArrayList<>();
+
+        private Document(char escape) {
+            this.escape = Character.toString(escape);
+        }
     }
 
     private static final class Instruction {
