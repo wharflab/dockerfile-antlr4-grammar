@@ -9,6 +9,8 @@ RUN printf '%s\n' first `
 RUN printf '%s\n' 'C:\Program Files\app'
 RUN --mount="type=secret,id=a`"b" true
 RUN --mount=type=cache,`
+
 target=/var/cache true
 RUN printf '%s\n' attached`
+
 continuation

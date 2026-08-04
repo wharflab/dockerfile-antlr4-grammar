@@ -57,6 +57,9 @@ fragment CHECK_DIRECTIVE_PREFIX
 fragment DIRECTIVE_VALUE: ~[ \t\r\n] ~[\r\n]*;
 fragment LINE_END: NEWLINE | EOF;
 fragment NEWLINE: '\r'? '\n' | '\r';
+fragment CONTINUATION_IGNORED_LINE
+    : [ \t]* ('#' ~[\r\n]*)? NEWLINE
+    ;
 
 fragment ESCAPE_WORD: [eE][sS][cC][aA][pP][eE];
 fragment SYNTAX_WORD: [sS][yY][nN][tT][aA][xX];
@@ -195,7 +198,7 @@ BACKTICK_WS: [ \t]+ -> skip;
 mode SLASH_ARGS;
 
 ARG_LINE_CONT
-    : '\\' [ \t]* NEWLINE ([ \t]* '#' ~[\r\n]* NEWLINE)* -> skip
+    : '\\' [ \t]* NEWLINE CONTINUATION_IGNORED_LINE* -> skip
     ;
 ARG_NL: [ \t]* NEWLINE -> type(NL), mode(SLASH_BODY);
 
@@ -210,7 +213,7 @@ fragment SLASH_BUILDER_FLAG_PART
     ;
 fragment SLASH_BUILDER_FLAG_ESCAPE
     : '\\' (
-        [ \t]* NEWLINE ([ \t]* '#' ~[\r\n]* NEWLINE)*
+        [ \t]* NEWLINE CONTINUATION_IGNORED_LINE*
         | .
       )?
     ;
@@ -231,7 +234,7 @@ ANY_OTHER: . -> type(ARG_TEXT);
 mode BACKTICK_ARGS;
 
 BACKTICK_ARG_LINE_CONT
-    : '`' [ \t]* NEWLINE ([ \t]* '#' ~[\r\n]* NEWLINE)* -> skip
+    : '`' [ \t]* NEWLINE CONTINUATION_IGNORED_LINE* -> skip
     ;
 BACKTICK_ARG_NL: [ \t]* NEWLINE -> type(NL), mode(BACKTICK_BODY);
 
@@ -248,7 +251,7 @@ fragment BACKTICK_BUILDER_FLAG_PART
     ;
 fragment BACKTICK_BUILDER_FLAG_ESCAPE
     : '`' (
-        [ \t]* NEWLINE ([ \t]* '#' ~[\r\n]* NEWLINE)*
+        [ \t]* NEWLINE CONTINUATION_IGNORED_LINE*
         | .
       )?
     ;
