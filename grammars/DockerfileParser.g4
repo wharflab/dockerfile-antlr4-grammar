@@ -31,14 +31,26 @@ instruction
     | shell_inst
     ;
 
-from_inst: FROM arguments NL;
-run_inst: RUN (json_array | arguments) NL;
+from_inst
+    : FROM builder_flags arguments NL
+    | FROM arguments NL
+    ;
+run_inst
+    : RUN builder_flags (json_array | arguments)? NL
+    | RUN (json_array | arguments) NL
+    ;
 cmd_inst: CMD (json_array | arguments) NL;
 label_inst: LABEL arguments NL;
 expose_inst: EXPOSE arguments NL;
 env_inst: ENV arguments NL;
-add_inst: ADD (json_array | arguments) NL;
-copy_inst: COPY (json_array | arguments) NL;
+add_inst
+    : ADD builder_flags (json_array | arguments) NL
+    | ADD (json_array | arguments) NL
+    ;
+copy_inst
+    : COPY builder_flags (json_array | arguments) NL
+    | COPY (json_array | arguments) NL
+    ;
 entrypoint_inst: ENTRYPOINT (json_array | arguments) NL;
 volume_inst: VOLUME (json_array | arguments) NL;
 user_inst: USER arguments NL;
@@ -47,11 +59,30 @@ arg_inst: ARG arguments NL;
 onbuild_inst: ONBUILD (instruction | NL);
 stopsignal_inst: STOPSIGNAL arguments NL;
 healthcheck_inst
-    : HEALTHCHECK NONE NL
+    : HEALTHCHECK builder_flags NONE NL
+    | HEALTHCHECK NONE NL
+    | HEALTHCHECK builder_flags arguments? instruction
     | HEALTHCHECK arguments? instruction
     ;
 shell_inst: SHELL json_array NL;
 
+builder_flags
+    : BUILDER_FLAG+ BUILDER_FLAG_TERMINATOR?
+    | BUILDER_FLAG_TERMINATOR
+    ;
+
 json_array: LBRACKET (STRING (COMMA STRING)*)? RBRACKET;
 
-arguments: (ARG_TEXT | STRING | LBRACKET | RBRACKET | COMMA | NONE | CMD)+;
+arguments
+    : (
+        ARG_TEXT
+        | BUILDER_FLAG
+        | BUILDER_FLAG_TERMINATOR
+        | STRING
+        | LBRACKET
+        | RBRACKET
+        | COMMA
+        | NONE
+        | CMD
+      )+
+    ;

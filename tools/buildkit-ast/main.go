@@ -150,16 +150,46 @@ func argumentText(node *parser.Node, escape rune) string {
 	for range node.Flags {
 		line = consumeWord(line, escape)
 	}
+	if supportsBuilderFlags(node.Value) {
+		line = consumeBuilderFlagTerminator(line, escape)
+	}
 	return strings.TrimSpace(line)
 }
 
-func consumeWord(value string, escape rune) string {
+func supportsBuilderFlags(command string) bool {
+	switch strings.ToLower(command) {
+	case "from", "run", "add", "copy", "healthcheck":
+		return true
+	default:
+		return false
+	}
+}
+
+func consumeBuilderFlagTerminator(value string, escape rune) string {
 	value = strings.TrimLeftFunc(value, unicode.IsSpace)
+	if !strings.HasPrefix(value, "--") {
+		return value
+	}
+	if word, remaining := splitWord(value, escape); word == "--" {
+		return remaining
+	}
+	return value
+}
+
+func consumeWord(value string, escape rune) string {
+	_, remaining := splitWord(value, escape)
+	return remaining
+}
+
+func splitWord(value string, escape rune) (string, string) {
+	value = strings.TrimLeftFunc(value, unicode.IsSpace)
+	var word strings.Builder
 	quote := rune(0)
 	escaped := false
 
 	for index, current := range value {
 		if escaped {
+			word.WriteRune(current)
 			escaped = false
 			continue
 		}
@@ -170,6 +200,8 @@ func consumeWord(value string, escape rune) string {
 		if quote != 0 {
 			if current == quote {
 				quote = 0
+			} else {
+				word.WriteRune(current)
 			}
 			continue
 		}
@@ -178,11 +210,12 @@ func consumeWord(value string, escape rune) string {
 			continue
 		}
 		if unicode.IsSpace(current) {
-			return strings.TrimLeftFunc(value[index:], unicode.IsSpace)
+			return word.String(), strings.TrimLeftFunc(value[index:], unicode.IsSpace)
 		}
+		word.WriteRune(current)
 	}
 
-	return ""
+	return word.String(), ""
 }
 
 func normalizeText(value string, escape rune) string {

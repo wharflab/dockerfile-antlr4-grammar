@@ -10,6 +10,7 @@ This project provides a comprehensive ANTLR4 grammar for Dockerfiles.
   - Recursive `ONBUILD` and `HEALTHCHECK CMD`.
   - Support for nested blocks, lists (block and flow), and key-value pairs.
 - **Form Support:** Handles both shell form and exec form (`[...]`) for instructions.
+- **Builder Flags:** Captures leading flags on `FROM`, `RUN`, `ADD`, `COPY`, and `HEALTHCHECK`.
 - **Line Continuations:** Correctly handles multi-line instructions using `\` continuation character.
 - **Comments:** Supports single-line comments starting with `#`.
 
