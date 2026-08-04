@@ -17,3 +17,12 @@
 - If target-specific code is unavoidable, isolate it, document why a portable
   grammar solution is not practical, and provide equivalent behavior and
   validation for Swift, Rust, and Python.
+
+## Parity tests
+
+- Keep parser adapters literal: project only values exposed by the parser,
+  lexer tokens, or parse tree.
+- Do not reread and reinterpret source text or normalize whitespace, quoting,
+  escaping, continuations, or argument grouping to make parsers agree.
+- Let strict parity fail for unsupported behavior and fix the grammar rather
+  than the comparison adapter.

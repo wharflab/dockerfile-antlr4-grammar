@@ -1,15 +1,14 @@
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
-import java.util.regex.Pattern;
 
 import org.antlr.v4.runtime.BaseErrorListener;
+import org.antlr.v4.runtime.CharStream;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
+import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.RecognitionException;
 import org.antlr.v4.runtime.Recognizer;
 import org.antlr.v4.runtime.Token;
@@ -17,15 +16,8 @@ import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.TerminalNode;
 
 public final class AstDump {
-    private static final Pattern CONTINUATION_COMMENT =
-        Pattern.compile("(?m)^[ \\t]*#[^\\r\\n]*(?:\\r?\\n|\\r|\\n)");
-
-    private static String source;
-    private static char escapeToken;
-    private static Pattern lineContinuation;
-    private static int[] codePointOffsets;
-    private static CommonTokenStream tokens;
-
+    // Keep this projection deliberately literal. Values come from emitted tokens
+    // and parse-tree structure; semantic gaps must be fixed in the grammar, not here.
     private AstDump() {
     }
 
@@ -36,9 +28,9 @@ public final class AstDump {
         }
 
         Path input = Path.of(args[0]);
+        CharStream source;
         try {
-            source = Files.readString(input, StandardCharsets.UTF_8);
-            codePointOffsets = codePointOffsets(source);
+            source = CharStreams.fromPath(input, StandardCharsets.UTF_8);
         } catch (IOException error) {
             System.err.printf("%s: %s%n", input, error.getMessage());
             System.exit(2);
@@ -46,29 +38,24 @@ public final class AstDump {
         }
 
         DiagnosticListener diagnostics = new DiagnosticListener(input.toString());
-        DockerfileLexer lexer = new DockerfileLexer(CharStreams.fromString(source, input.toString()));
+        DockerfileLexer lexer = new DockerfileLexer(source);
         lexer.removeErrorListeners();
         lexer.addErrorListener(diagnostics);
 
-        tokens = new CommonTokenStream(lexer);
+        CommonTokenStream tokens = new CommonTokenStream(lexer);
         DockerfileParser parser = new DockerfileParser(tokens);
         parser.removeErrorListeners();
         parser.addErrorListener(diagnostics);
 
         DockerfileParser.DockerfileContext tree = parser.dockerfile();
         tokens.fill();
-        escapeToken = effectiveEscapeToken();
-        lineContinuation = Pattern.compile(
-            Pattern.quote(Character.toString(escapeToken))
-                + "[ \\t]*(?:\\r?\\n|\\r)"
-        );
 
         if (!diagnostics.messages.isEmpty()) {
             diagnostics.messages.forEach(System.err::println);
             System.exit(1);
         }
 
-        Document document = new Document(escapeToken);
+        Document document = new Document(effectiveEscapeToken(tokens));
         for (DockerfileParser.ElementContext element : tree.element()) {
             if (element.instruction() != null) {
                 document.instructions.add(toInstruction(element.instruction()));
@@ -79,7 +66,7 @@ public final class AstDump {
         System.out.write(output, 0, output.length);
     }
 
-    private static char effectiveEscapeToken() {
+    private static char effectiveEscapeToken(CommonTokenStream tokens) {
         for (Token token : tokens.getTokens()) {
             if (token.getType() == DockerfileLexer.BACKTICK_ESCAPE_DIRECTIVE) {
                 return '`';
@@ -93,59 +80,84 @@ public final class AstDump {
 
     private static Instruction toInstruction(DockerfileParser.InstructionContext wrapper) {
         ParseTree firstChild = wrapper.getChild(0);
-        if (!(firstChild instanceof org.antlr.v4.runtime.ParserRuleContext)) {
+        if (!(firstChild instanceof ParserRuleContext)) {
             throw new IllegalStateException("instruction has no parser-rule child");
         }
 
-        org.antlr.v4.runtime.ParserRuleContext context =
-            (org.antlr.v4.runtime.ParserRuleContext) firstChild;
+        ParserRuleContext context = (ParserRuleContext) firstChild;
         Token commandToken = context.getStart();
 
         Instruction instruction = new Instruction();
-        instruction.command = commandToken.getText().toLowerCase(Locale.ROOT);
+        instruction.command = commandToken.getText();
         instruction.location = new Location(
             commandToken.getLine(),
             context.getStop().getLine()
         );
 
-        Token argumentStart = commandToken;
         DockerfileParser.Builder_flagsContext builderFlags = directBuilderFlags(context);
         if (builderFlags != null) {
             for (TerminalNode flag : builderFlags.BUILDER_FLAG()) {
-                String value = decodeBuilderFlag(flag.getText());
-                if (!"--".equals(value)) {
-                    instruction.flags.add(value);
-                }
+                instruction.flags.add(flag.getText());
             }
-            argumentStart = builderFlags.getStop();
         }
 
         DockerfileParser.Json_arrayContext json = directJsonArray(context);
-        if (json != null) {
-            instruction.argumentKind = "json";
-            List<String> values = new ArrayList<>();
-            for (TerminalNode string : json.STRING()) {
-                values.add(decodeString(string.getText()));
-            }
-            instruction.arguments = values;
-        } else {
-            instruction.argumentKind = "text";
-            instruction.arguments = argumentText(argumentStart, context.getStop());
-        }
+        instruction.argumentKind = json == null ? "text" : "json";
+        addDirectArguments(context, commandToken, instruction.arguments);
 
-        if ("onbuild".equals(instruction.command)) {
-            DockerfileParser.Onbuild_instContext onbuild =
-                (DockerfileParser.Onbuild_instContext) context;
-            if (onbuild.instruction() != null) {
-                instruction.children.add(toInstruction(onbuild.instruction()));
+        if (context.children != null) {
+            for (ParseTree child : context.children) {
+                if (child instanceof DockerfileParser.InstructionContext) {
+                    instruction.children.add(
+                        toInstruction((DockerfileParser.InstructionContext) child)
+                    );
+                }
             }
         }
 
         return instruction;
     }
 
+    private static void addDirectArguments(
+        ParserRuleContext context,
+        Token command,
+        List<String> arguments
+    ) {
+        if (context.children == null) {
+            return;
+        }
+        for (ParseTree child : context.children) {
+            if (child instanceof DockerfileParser.ArgumentsContext) {
+                addTerminalText((ParserRuleContext) child, arguments);
+            } else if (child instanceof DockerfileParser.Json_arrayContext) {
+                for (TerminalNode string :
+                    ((DockerfileParser.Json_arrayContext) child).STRING()) {
+                    arguments.add(string.getText());
+                }
+            } else if (child instanceof TerminalNode) {
+                Token token = ((TerminalNode) child).getSymbol();
+                if (token != command
+                    && token.getType() != Token.EOF
+                    && token.getType() != DockerfileLexer.NL) {
+                    arguments.add(token.getText());
+                }
+            }
+        }
+    }
+
+    private static void addTerminalText(ParserRuleContext context, List<String> values) {
+        if (context.children == null) {
+            return;
+        }
+        for (ParseTree child : context.children) {
+            if (child instanceof TerminalNode) {
+                values.add(child.getText());
+            }
+        }
+    }
+
     private static DockerfileParser.Builder_flagsContext directBuilderFlags(
-        org.antlr.v4.runtime.ParserRuleContext context
+        ParserRuleContext context
     ) {
         if (context.children == null) {
             return null;
@@ -159,7 +171,7 @@ public final class AstDump {
     }
 
     private static DockerfileParser.Json_arrayContext directJsonArray(
-        org.antlr.v4.runtime.ParserRuleContext context
+        ParserRuleContext context
     ) {
         if (context.children == null) {
             return null;
@@ -170,225 +182,6 @@ public final class AstDump {
             }
         }
         return null;
-    }
-
-    private static String argumentText(Token command, Token stop) {
-        List<Token> visible = tokens.getTokens(
-            command.getTokenIndex() + 1,
-            stop.getTokenIndex() - 1
-        );
-        if (visible == null || visible.isEmpty()) {
-            return "";
-        }
-
-        StringBuilder result = new StringBuilder();
-        Token previous = null;
-        for (Token token : visible) {
-            if (token.getType() == Token.EOF || token.getType() == DockerfileLexer.NL) {
-                continue;
-            }
-            if (previous != null && hasLogicalGap(previous, token)) {
-                result.append(' ');
-            }
-            result.append(logicalTokenText(token.getText()));
-            previous = token;
-        }
-        return normalizeText(result.toString());
-    }
-
-    private static boolean hasLogicalGap(Token previous, Token current) {
-        int start = previous.getStopIndex() + 1;
-        int end = current.getStartIndex();
-        if (start < 0 || end <= start || start >= codePointOffsets.length) {
-            return false;
-        }
-
-        int charStart = codePointOffsets[start];
-        int charEnd = codePointOffsets[Math.min(end, codePointOffsets.length - 1)];
-        String gap = source.substring(charStart, charEnd);
-        gap = CONTINUATION_COMMENT.matcher(gap).replaceAll("");
-        gap = lineContinuation.matcher(gap).replaceAll("");
-        return !gap.isEmpty();
-    }
-
-    private static String logicalTokenText(String value) {
-        value = CONTINUATION_COMMENT.matcher(value).replaceAll("");
-        return lineContinuation.matcher(value).replaceAll("");
-    }
-
-    private static int[] codePointOffsets(String value) {
-        int count = value.codePointCount(0, value.length());
-        int[] offsets = new int[count + 1];
-        int charOffset = 0;
-        for (int codePoint = 0; codePoint < count; codePoint++) {
-            offsets[codePoint] = charOffset;
-            charOffset = value.offsetByCodePoints(charOffset, 1);
-        }
-        offsets[count] = value.length();
-        return offsets;
-    }
-
-    private static String normalizeText(String value) {
-        StringBuilder result = new StringBuilder();
-        char quote = 0;
-        boolean escaped = false;
-        boolean pendingSpace = false;
-
-        for (int index = 0; index < value.length(); index++) {
-            char current = value.charAt(index);
-
-            if (escaped) {
-                result.append(current);
-                escaped = false;
-                continue;
-            }
-            if (current == escapeToken && quote != '\'') {
-                if (pendingSpace && result.length() > 0) {
-                    result.append(' ');
-                    pendingSpace = false;
-                }
-                result.append(current);
-                escaped = true;
-                continue;
-            }
-            if (quote != 0) {
-                result.append(current);
-                if (current == quote) {
-                    quote = 0;
-                }
-                continue;
-            }
-            if (current == '\'' || current == '"') {
-                if (pendingSpace && result.length() > 0) {
-                    result.append(' ');
-                    pendingSpace = false;
-                }
-                quote = current;
-                result.append(current);
-                continue;
-            }
-            if (Character.isWhitespace(current)) {
-                pendingSpace = result.length() > 0;
-                continue;
-            }
-            if (pendingSpace) {
-                result.append(' ');
-                pendingSpace = false;
-            }
-            result.append(current);
-        }
-
-        return result.toString();
-    }
-
-    private static String decodeBuilderFlag(String token) {
-        String value = logicalTokenText(token);
-        StringBuilder result = new StringBuilder();
-        char quote = 0;
-        boolean escaped = false;
-
-        for (int index = 0; index < value.length(); index++) {
-            char current = value.charAt(index);
-            if (escaped) {
-                result.append(current);
-                escaped = false;
-                continue;
-            }
-            if (current == escapeToken) {
-                escaped = true;
-                continue;
-            }
-            if (quote != 0) {
-                if (current == quote) {
-                    quote = 0;
-                } else {
-                    result.append(current);
-                }
-                continue;
-            }
-            if (current == '\'' || current == '"') {
-                quote = current;
-            } else {
-                result.append(current);
-            }
-        }
-
-        return result.toString();
-    }
-
-    private static String decodeString(String token) {
-        if (token.length() < 2) {
-            return token;
-        }
-
-        char quote = token.charAt(0);
-        StringBuilder result = new StringBuilder();
-        for (int index = 1; index < token.length() - 1; index++) {
-            char current = token.charAt(index);
-            if (current != '\\' || index + 1 >= token.length() - 1) {
-                result.append(current);
-                continue;
-            }
-
-            char escaped = token.charAt(++index);
-            switch (escaped) {
-                case '"':
-                case '\'':
-                case '\\':
-                case '/':
-                    result.append(escaped);
-                    break;
-                case 'b':
-                    result.append('\b');
-                    break;
-                case 'f':
-                    result.append('\f');
-                    break;
-                case 'n':
-                    result.append('\n');
-                    break;
-                case 'r':
-                    result.append('\r');
-                    break;
-                case 't':
-                    result.append('\t');
-                    break;
-                case 'u':
-                    if (index + 4 < token.length() - 1) {
-                        String digits = token.substring(index + 1, index + 5);
-                        try {
-                            char decoded = (char) Integer.parseInt(digits, 16);
-                            if (Character.isHighSurrogate(decoded)
-                                && index + 10 < token.length() - 1
-                                && token.charAt(index + 5) == '\\'
-                                && token.charAt(index + 6) == 'u') {
-                                String lowDigits = token.substring(index + 7, index + 11);
-                                char low = (char) Integer.parseInt(lowDigits, 16);
-                                if (Character.isLowSurrogate(low)) {
-                                    result.appendCodePoint(Character.toCodePoint(decoded, low));
-                                    index += 10;
-                                    break;
-                                }
-                            }
-                            result.append(Character.isSurrogate(decoded) ? '\uFFFD' : decoded);
-                            index += 4;
-                            break;
-                        } catch (NumberFormatException ignored) {
-                            // Preserve invalid escapes so the parity diff remains inspectable.
-                        }
-                    }
-                    result.append('\\').append(escaped);
-                    break;
-                default:
-                    result.append(escaped);
-                    break;
-            }
-        }
-
-        if (quote != '"' && quote != '\'') {
-            return token;
-        }
-        return result.toString();
     }
 
     private static final class DiagnosticListener extends BaseErrorListener {
@@ -430,7 +223,7 @@ public final class AstDump {
     private static final class Instruction {
         private String command;
         private String argumentKind;
-        private Object arguments;
+        private final List<String> arguments = new ArrayList<>();
         private final List<String> flags = new ArrayList<>();
         private final List<Instruction> children = new ArrayList<>();
         private final List<Heredoc> heredocs = new ArrayList<>();
@@ -474,13 +267,7 @@ public final class AstDump {
             field(result, level + 1, "command", quote(instruction.command), true);
             field(result, level + 1, "argumentKind", quote(instruction.argumentKind), true);
             indent(result, level + 1).append("\"arguments\": ");
-            if (instruction.arguments instanceof List<?>) {
-                @SuppressWarnings("unchecked")
-                List<String> values = (List<String>) instruction.arguments;
-                strings(result, values, level + 1);
-            } else {
-                result.append(quote((String) instruction.arguments));
-            }
+            strings(result, instruction.arguments, level + 1);
             result.append(",\n");
             indent(result, level + 1).append("\"flags\": ");
             strings(result, instruction.flags, level + 1);
