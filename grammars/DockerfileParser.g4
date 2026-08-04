@@ -91,14 +91,21 @@ builder_flags
     | BUILDER_FLAG_TERMINATOR
     ;
 
-json_array: LBRACKET (STRING (COMMA STRING)*)? RBRACKET;
+json_array
+    : LBRACKET (string_value (COMMA string_value)*)? RBRACKET
+    ;
+
+string_value
+    : STRING
+    | STRING_START STRING_TEXT* STRING_END
+    ;
 
 arguments
     : (
         ARG_TEXT
         | BUILDER_FLAG
         | BUILDER_FLAG_TERMINATOR
-        | STRING
+        | string_value
         | LBRACKET
         | RBRACKET
         | COMMA

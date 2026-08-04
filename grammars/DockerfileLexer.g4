@@ -1,6 +1,6 @@
 lexer grammar DockerfileLexer;
 
-tokens { NONE, INVALID_DIRECTIVE }
+tokens { NONE, INVALID_DIRECTIVE, STRING_START, STRING_TEXT, STRING_END }
 
 // DEFAULT_MODE is the initial parser-directive preamble. Dockerfiles use
 // backslash escapes unless a valid top-of-file directive selects backtick.
@@ -19,7 +19,10 @@ CHECK_DIRECTIVE
     : CHECK_DIRECTIVE_PREFIX DIRECTIVE_VALUE LINE_END
     ;
 INVALID_ESCAPE_DIRECTIVE
-    : ESCAPE_DIRECTIVE_PREFIX DIRECTIVE_VALUE LINE_END
+    : (
+        ESCAPE_DIRECTIVE_PREFIX DIRECTIVE_VALUE
+        | ESCAPE_DIRECTIVE_HEAD [ \t]+
+      ) LINE_END
       -> type(INVALID_DIRECTIVE), mode(SLASH_BODY)
     ;
 
@@ -46,7 +49,10 @@ NL: NEWLINE+ -> mode(SLASH_BODY);
 WS: [ \t]+ -> skip;
 
 fragment ESCAPE_DIRECTIVE_PREFIX
-    : [ \t]* '#' [ \t]* ESCAPE_WORD [ \t]* '=' [ \t]*
+    : ESCAPE_DIRECTIVE_HEAD [ \t]*
+    ;
+fragment ESCAPE_DIRECTIVE_HEAD
+    : [ \t]* '#' [ \t]* ESCAPE_WORD [ \t]* '='
     ;
 fragment SYNTAX_DIRECTIVE_PREFIX
     : [ \t]* '#' [ \t]* SYNTAX_WORD [ \t]* '=' [ \t]*
@@ -103,7 +109,10 @@ BACKTICK_PREAMBLE_CHECK
       -> type(CHECK_DIRECTIVE)
     ;
 BACKTICK_PREAMBLE_INVALID_ESCAPE
-    : ESCAPE_DIRECTIVE_PREFIX DIRECTIVE_VALUE LINE_END
+    : (
+        ESCAPE_DIRECTIVE_PREFIX DIRECTIVE_VALUE
+        | ESCAPE_DIRECTIVE_HEAD [ \t]+
+      ) LINE_END
       -> type(INVALID_DIRECTIVE), mode(BACKTICK_BODY)
     ;
 
@@ -221,7 +230,16 @@ fragment SLASH_BUILDER_FLAG_ESCAPE
 LBRACKET: '[';
 RBRACKET: ']';
 COMMA: ',';
-STRING: '"' ( ~["\\] | '\\' . )* '"' | '\'' ( ~['\\] | '\\' . )* '\'';
+STRING
+    : '"' ( ~["\\\r\n] | '\\' ~[\r\n] )* '"'
+    | '\'' ( ~['\\\r\n] | '\\' ~[\r\n] )* '\''
+    ;
+SLASH_DOUBLE_STRING_START
+    : '"' -> type(STRING_START), mode(SLASH_DOUBLE_QUOTE)
+    ;
+SLASH_SINGLE_STRING_START
+    : '\'' -> type(STRING_START), mode(SLASH_SINGLE_QUOTE)
+    ;
 ARG_NONE: [nN][oO][nN][eE] -> type(NONE);
 ARG_CMD: [cC][mM][dD] -> type(CMD);
 ARG_TEXT: ~[\r\n \t[\],"'#\\`]+;
@@ -261,9 +279,15 @@ BACKTICK_RBRACKET: ']' -> type(RBRACKET);
 BACKTICK_COMMA: ',' -> type(COMMA);
 BACKTICK_STRING
     : (
-        '"' ( ~["\\] | '\\' . )* '"'
-        | '\'' ( ~['\\] | '\\' . )* '\''
+        '"' ( ~["\\\r\n] | '\\' ~[\r\n] )* '"'
+        | '\'' ( ~['\\\r\n] | '\\' ~[\r\n] )* '\''
       ) -> type(STRING)
+    ;
+BACKTICK_DOUBLE_STRING_START
+    : '"' -> type(STRING_START), mode(BACKTICK_DOUBLE_QUOTE)
+    ;
+BACKTICK_SINGLE_STRING_START
+    : '\'' -> type(STRING_START), mode(BACKTICK_SINGLE_QUOTE)
     ;
 BACKTICK_ARG_NONE: [nN][oO][nN][eE] -> type(NONE);
 BACKTICK_ARG_CMD: [cC][mM][dD] -> type(CMD);
@@ -273,3 +297,63 @@ BACKTICK_ARG_HASH: '#' -> type(ARG_TEXT);
 BACKTICK_ARG_BACKSLASH: '\\' -> type(ARG_TEXT);
 BACKTICK_ARG_BACKTICK: '`' -> type(ARG_TEXT);
 BACKTICK_ANY_OTHER: . -> type(ARG_TEXT);
+
+mode SLASH_DOUBLE_QUOTE;
+
+SLASH_DOUBLE_QUOTE_CONTINUATION
+    : '\\' [ \t]* NEWLINE CONTINUATION_IGNORED_LINE* -> skip
+    ;
+SLASH_DOUBLE_QUOTE_END
+    : '"' -> type(STRING_END), mode(SLASH_ARGS)
+    ;
+SLASH_DOUBLE_QUOTE_TEXT
+    : ( ~["\\\r\n]+ | '\\' ~[\r\n] ) -> type(STRING_TEXT)
+    ;
+SLASH_DOUBLE_QUOTE_NL
+    : NEWLINE -> type(NL), mode(SLASH_BODY)
+    ;
+
+mode SLASH_SINGLE_QUOTE;
+
+SLASH_SINGLE_QUOTE_CONTINUATION
+    : '\\' [ \t]* NEWLINE CONTINUATION_IGNORED_LINE* -> skip
+    ;
+SLASH_SINGLE_QUOTE_END
+    : '\'' -> type(STRING_END), mode(SLASH_ARGS)
+    ;
+SLASH_SINGLE_QUOTE_TEXT
+    : ( ~['\\\r\n]+ | '\\' ~[\r\n] ) -> type(STRING_TEXT)
+    ;
+SLASH_SINGLE_QUOTE_NL
+    : NEWLINE -> type(NL), mode(SLASH_BODY)
+    ;
+
+mode BACKTICK_DOUBLE_QUOTE;
+
+BACKTICK_DOUBLE_QUOTE_CONTINUATION
+    : '`' [ \t]* NEWLINE CONTINUATION_IGNORED_LINE* -> skip
+    ;
+BACKTICK_DOUBLE_QUOTE_END
+    : '"' -> type(STRING_END), mode(BACKTICK_ARGS)
+    ;
+BACKTICK_DOUBLE_QUOTE_TEXT
+    : ( ~["\\`\r\n]+ | '\\' ~[\r\n] | '`' ) -> type(STRING_TEXT)
+    ;
+BACKTICK_DOUBLE_QUOTE_NL
+    : NEWLINE -> type(NL), mode(BACKTICK_BODY)
+    ;
+
+mode BACKTICK_SINGLE_QUOTE;
+
+BACKTICK_SINGLE_QUOTE_CONTINUATION
+    : '`' [ \t]* NEWLINE CONTINUATION_IGNORED_LINE* -> skip
+    ;
+BACKTICK_SINGLE_QUOTE_END
+    : '\'' -> type(STRING_END), mode(BACKTICK_ARGS)
+    ;
+BACKTICK_SINGLE_QUOTE_TEXT
+    : ( ~['\\`\r\n]+ | '\\' ~[\r\n] | '`' ) -> type(STRING_TEXT)
+    ;
+BACKTICK_SINGLE_QUOTE_NL
+    : NEWLINE -> type(NL), mode(BACKTICK_BODY)
+    ;

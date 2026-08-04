@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-# EsCaPe = `
+   # EsCaPe = `
 # check=skip=all
 FROM alpine:3.22
 RUN printf `"two  words`"
@@ -14,3 +14,9 @@ target=/var/cache true
 RUN printf '%s\n' attached`
 
 continuation
+RUN printf '%s\n' "double quoted`
+continuation"
+RUN printf '%s\n' 'single quoted`
+continuation'
+RUN ["printf", "%s\n", "exec`
+continuation"]
