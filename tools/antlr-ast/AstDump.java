@@ -128,11 +128,14 @@ public final class AstDump {
         }
         for (ParseTree child : context.children) {
             if (child instanceof DockerfileParser.ArgumentsContext) {
-                addTerminalText((ParserRuleContext) child, arguments);
+                addArgumentValues(
+                    (DockerfileParser.ArgumentsContext) child,
+                    arguments
+                );
             } else if (child instanceof DockerfileParser.Json_arrayContext) {
                 for (DockerfileParser.String_valueContext string :
                     ((DockerfileParser.Json_arrayContext) child).string_value()) {
-                    addTerminalText(string, arguments);
+                    arguments.add(string.getText());
                 }
             } else if (child instanceof TerminalNode) {
                 Token token = ((TerminalNode) child).getSymbol();
@@ -145,15 +148,18 @@ public final class AstDump {
         }
     }
 
-    private static void addTerminalText(ParserRuleContext context, List<String> values) {
+    private static void addArgumentValues(
+        DockerfileParser.ArgumentsContext context,
+        List<String> values
+    ) {
         if (context.children == null) {
             return;
         }
         for (ParseTree child : context.children) {
             if (child instanceof TerminalNode) {
                 values.add(child.getText());
-            } else if (child instanceof ParserRuleContext) {
-                addTerminalText((ParserRuleContext) child, values);
+            } else if (child instanceof DockerfileParser.String_valueContext) {
+                values.add(child.getText());
             }
         }
     }
