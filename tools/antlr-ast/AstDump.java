@@ -237,7 +237,8 @@ public final class AstDump {
         DockerfileParser.Json_arrayContext context,
         List<String> values
     ) {
-        for (DockerfileParser.String_valueContext string : context.string_value()) {
+        for (DockerfileParser.Json_string_valueContext string :
+            context.json_string_value()) {
             values.add(string.getText());
         }
     }

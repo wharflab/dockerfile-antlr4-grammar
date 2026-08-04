@@ -102,18 +102,28 @@ builder_flags
 
 json_array
     : LBRACKET ARG_WS* (
-        string_value ARG_WS* (
-            COMMA ARG_WS* string_value ARG_WS*
+        json_string_value ARG_WS* (
+            COMMA ARG_WS* json_string_value ARG_WS*
         )*
       )? RBRACKET
     ;
 
+json_string_value
+    : JSON_STRING_START (
+        JSON_STRING_TEXT
+        | JSON_STRING_SPACE
+        | JSON_STRING_ESCAPE
+      )* JSON_STRING_END
+    ;
+
 string_value
-    : STRING_START (STRING_TEXT | ARG_WS | ESCAPE)* STRING_END
+    : JSON_STRING_START double_string_atom* JSON_STRING_END
+    | STRING_START (STRING_TEXT | ARG_WS | ESCAPE)* STRING_END
     ;
 
 unterminated_string_value
-    : STRING_START (STRING_TEXT | ARG_WS | ESCAPE)*
+    : JSON_STRING_START double_string_atom*
+    | STRING_START (STRING_TEXT | ARG_WS | ESCAPE)*
     ;
 
 argument_string_value
@@ -121,18 +131,32 @@ argument_string_value
     | unterminated_string_value
     ;
 
+double_string_atom
+    : JSON_STRING_TEXT
+    | JSON_STRING_SPACE
+    | JSON_STRING_ESCAPE
+    | STRING_TEXT
+    | ESCAPE
+    | ARG_WS
+    ;
+
 // BuildKit keeps shell-form text as one node, but splits list-form arguments
 // on raw whitespace even when that whitespace appears inside quotes.
 shell_argument
-    : (list_atom | ARG_WS)+
+    : (list_atom | list_whitespace)+
     ;
 
 argument_list
-    : list_argument (ARG_WS+ list_argument)*
+    : list_argument (list_whitespace+ list_argument)*
     ;
 
 list_argument
     : list_atom+
+    ;
+
+list_whitespace
+    : ARG_WS
+    | JSON_STRING_SPACE
     ;
 
 word_list
@@ -190,6 +214,10 @@ list_atom
     | STRING_START
     | STRING_TEXT
     | STRING_END
+    | JSON_STRING_START
+    | JSON_STRING_TEXT
+    | JSON_STRING_ESCAPE
+    | JSON_STRING_END
     | ESCAPE
     | LBRACKET
     | RBRACKET

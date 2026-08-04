@@ -6,6 +6,11 @@ tokens {
     STRING_START,
     STRING_TEXT,
     STRING_END,
+    JSON_STRING_START,
+    JSON_STRING_TEXT,
+    JSON_STRING_SPACE,
+    JSON_STRING_ESCAPE,
+    JSON_STRING_END,
     EQUALS,
     ESCAPE
 }
@@ -71,6 +76,10 @@ fragment CHECK_DIRECTIVE_PREFIX
 fragment DIRECTIVE_VALUE: ~[ \t\r\n] ~[\r\n]*;
 fragment LINE_END: NEWLINE | EOF;
 fragment NEWLINE: '\r'? '\n' | '\r';
+fragment JSON_ESCAPE_SEQUENCE
+    : '\\' (["\\/bfnrt] | 'u' HEX_DIGIT HEX_DIGIT HEX_DIGIT HEX_DIGIT)
+    ;
+fragment HEX_DIGIT: [0-9a-fA-F];
 fragment CONTINUATION_IGNORED_LINE
     : [ \t]* ('#' ~[\r\n]*)? NEWLINE
     ;
@@ -239,7 +248,7 @@ LBRACKET: '[';
 RBRACKET: ']';
 COMMA: ',';
 SLASH_DOUBLE_STRING_START
-    : '"' -> type(STRING_START), mode(SLASH_DOUBLE_QUOTE)
+    : '"' -> type(JSON_STRING_START), mode(SLASH_DOUBLE_QUOTE)
     ;
 SLASH_SINGLE_STRING_START
     : '\'' -> type(STRING_START), mode(SLASH_SINGLE_QUOTE)
@@ -249,7 +258,8 @@ ARG_CMD: [cC][mM][dD] -> type(CMD);
 ARG_EQUALS: '=' -> type(EQUALS);
 ARG_ESCAPED_CHAR: '\\' ~[\r\n \t] -> type(ARG_TEXT);
 ARG_TEXT: ~[\r\n \t[\],="'#\\]+;
-ARG_WS: [ \t]+;
+// Keep the character after ESCAPE separate from any following separator.
+ARG_WS: [ \t];
 ARG_HASH: '#' -> type(ARG_TEXT);
 ARG_BACKSLASH: '\\' -> type(ESCAPE);
 ANY_OTHER: . -> type(ARG_TEXT);
@@ -283,7 +293,7 @@ BACKTICK_LBRACKET: '[' -> type(LBRACKET);
 BACKTICK_RBRACKET: ']' -> type(RBRACKET);
 BACKTICK_COMMA: ',' -> type(COMMA);
 BACKTICK_DOUBLE_STRING_START
-    : '"' -> type(STRING_START), mode(BACKTICK_DOUBLE_QUOTE)
+    : '"' -> type(JSON_STRING_START), mode(BACKTICK_DOUBLE_QUOTE)
     ;
 BACKTICK_SINGLE_STRING_START
     : '\'' -> type(STRING_START), mode(BACKTICK_SINGLE_QUOTE)
@@ -293,27 +303,34 @@ BACKTICK_ARG_CMD: [cC][mM][dD] -> type(CMD);
 BACKTICK_ARG_EQUALS: '=' -> type(EQUALS);
 BACKTICK_ARG_ESCAPED_CHAR: '`' ~[\r\n \t] -> type(ARG_TEXT);
 BACKTICK_ARG_TEXT: ~[\r\n \t[\],="'#`]+ -> type(ARG_TEXT);
-BACKTICK_ARG_WS: [ \t]+ -> type(ARG_WS);
+BACKTICK_ARG_WS: [ \t] -> type(ARG_WS);
 BACKTICK_ARG_HASH: '#' -> type(ARG_TEXT);
 BACKTICK_ARG_BACKTICK: '`' -> type(ESCAPE);
 BACKTICK_ANY_OTHER: . -> type(ARG_TEXT);
 
 mode SLASH_DOUBLE_QUOTE;
 
+// JSON-valid pieces stay distinct; generic parser rules also accept the
+// remaining tokens when malformed JSON falls back to shell or list form.
 SLASH_DOUBLE_QUOTE_CONTINUATION
     : '\\' [ \t]* NEWLINE CONTINUATION_IGNORED_LINE* -> skip
     ;
 SLASH_DOUBLE_QUOTE_END
-    : '"' -> type(STRING_END), mode(SLASH_ARGS)
+    : '"' -> type(JSON_STRING_END), mode(SLASH_ARGS)
     ;
-SLASH_DOUBLE_QUOTE_WS: [ \t]+ -> type(ARG_WS);
-SLASH_DOUBLE_QUOTE_TEXT
-    : ( ~["\\\r\n \t]+ | '\\' ~[\r\n \t] ) -> type(STRING_TEXT)
+SLASH_DOUBLE_QUOTE_JSON_ESCAPE
+    : JSON_ESCAPE_SEQUENCE -> type(JSON_STRING_ESCAPE)
+    ;
+SLASH_DOUBLE_QUOTE_JSON_SPACE: ' '+ -> type(JSON_STRING_SPACE);
+SLASH_DOUBLE_QUOTE_LIST_WS: [\t\u000B\u000C]+ -> type(ARG_WS);
+SLASH_DOUBLE_QUOTE_JSON_TEXT
+    : ~["\\ \u0000-\u001F]+ -> type(JSON_STRING_TEXT)
     ;
 SLASH_DOUBLE_QUOTE_ESCAPE: '\\' -> type(ESCAPE);
 SLASH_DOUBLE_QUOTE_NL
     : NEWLINE -> type(NL), mode(SLASH_BODY)
     ;
+SLASH_DOUBLE_QUOTE_OTHER: . -> type(STRING_TEXT);
 
 mode SLASH_SINGLE_QUOTE;
 
@@ -338,21 +355,22 @@ BACKTICK_DOUBLE_QUOTE_CONTINUATION
     : '`' [ \t]* NEWLINE CONTINUATION_IGNORED_LINE* -> skip
     ;
 BACKTICK_DOUBLE_QUOTE_END
-    : '"' -> type(STRING_END), mode(BACKTICK_ARGS)
+    : '"' -> type(JSON_STRING_END), mode(BACKTICK_ARGS)
     ;
-BACKTICK_DOUBLE_QUOTE_WS: [ \t]+ -> type(ARG_WS);
-BACKTICK_DOUBLE_QUOTE_TEXT
-    : (
-        ~["\\`\r\n \t]+
-        | '\\' ~[\r\n \t]
-        | '`' ~[\r\n \t]
-      ) -> type(STRING_TEXT)
+BACKTICK_DOUBLE_QUOTE_JSON_ESCAPE
+    : JSON_ESCAPE_SEQUENCE -> type(JSON_STRING_ESCAPE)
     ;
+BACKTICK_DOUBLE_QUOTE_JSON_SPACE: ' '+ -> type(JSON_STRING_SPACE);
+BACKTICK_DOUBLE_QUOTE_LIST_WS: [\t\u000B\u000C]+ -> type(ARG_WS);
+BACKTICK_DOUBLE_QUOTE_JSON_TEXT
+    : ~["\\` \u0000-\u001F]+ -> type(JSON_STRING_TEXT)
+    ;
+BACKTICK_DOUBLE_QUOTE_JSON_BACKTICK: '`' -> type(JSON_STRING_TEXT);
 BACKTICK_DOUBLE_QUOTE_BACKSLASH: '\\' -> type(STRING_TEXT);
-BACKTICK_DOUBLE_QUOTE_ESCAPE: '`' -> type(ESCAPE);
 BACKTICK_DOUBLE_QUOTE_NL
     : NEWLINE -> type(NL), mode(BACKTICK_BODY)
     ;
+BACKTICK_DOUBLE_QUOTE_OTHER: . -> type(STRING_TEXT);
 
 mode BACKTICK_SINGLE_QUOTE;
 
