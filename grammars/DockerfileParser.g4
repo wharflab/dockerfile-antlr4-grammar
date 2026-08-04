@@ -2,7 +2,27 @@ parser grammar DockerfileParser;
 
 options { tokenVocab=DockerfileLexer; }
 
-dockerfile: (element)* EOF;
+dockerfile: parser_directives? (element)* EOF;
+
+parser_directives
+    : SYNTAX_DIRECTIVE (
+        escape_directive CHECK_DIRECTIVE?
+        | CHECK_DIRECTIVE escape_directive?
+      )?
+    | escape_directive (
+        SYNTAX_DIRECTIVE CHECK_DIRECTIVE?
+        | CHECK_DIRECTIVE SYNTAX_DIRECTIVE?
+      )?
+    | CHECK_DIRECTIVE (
+        SYNTAX_DIRECTIVE escape_directive?
+        | escape_directive SYNTAX_DIRECTIVE?
+      )?
+    ;
+
+escape_directive
+    : BACKTICK_ESCAPE_DIRECTIVE
+    | BACKSLASH_ESCAPE_DIRECTIVE
+    ;
 
 element
     : instruction

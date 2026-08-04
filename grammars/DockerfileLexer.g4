@@ -1,177 +1,272 @@
 lexer grammar DockerfileLexer;
 
-@members {
-    private static final java.util.regex.Pattern PARSER_DIRECTIVE =
-        java.util.regex.Pattern.compile(
-            "^([a-zA-Z][a-zA-Z0-9]*)\\s*=\\s*(.+?)\\s*$"
-        );
+tokens { NONE, INVALID_DIRECTIVE }
 
-    private final java.util.Set<String> seenParserDirectives =
-        new java.util.HashSet<String>();
-    private char escapeCharacter = '\\';
-    private boolean parserDirectivesAllowed = true;
-    private boolean preserveDirectiveNewline = false;
+// DEFAULT_MODE is the initial parser-directive preamble. Dockerfiles use
+// backslash escapes unless a valid top-of-file directive selects backtick.
 
-    public char getEscapeCharacter() {
-        return escapeCharacter;
-    }
+BACKTICK_ESCAPE_DIRECTIVE
+    : ESCAPE_DIRECTIVE_PREFIX '`' [ \t]* LINE_END
+      -> mode(BACKTICK_PREAMBLE)
+    ;
+BACKSLASH_ESCAPE_DIRECTIVE
+    : ESCAPE_DIRECTIVE_PREFIX '\\' [ \t]* LINE_END
+    ;
+SYNTAX_DIRECTIVE
+    : SYNTAX_DIRECTIVE_PREFIX DIRECTIVE_VALUE LINE_END
+    ;
+CHECK_DIRECTIVE
+    : CHECK_DIRECTIVE_PREFIX DIRECTIVE_VALUE LINE_END
+    ;
+INVALID_ESCAPE_DIRECTIVE
+    : ESCAPE_DIRECTIVE_PREFIX DIRECTIVE_VALUE LINE_END
+      -> type(INVALID_DIRECTIVE), mode(SLASH_BODY)
+    ;
 
-    private boolean isEscapeCharacter(int candidate) {
-        return candidate == escapeCharacter;
-    }
+FROM: FROM_WORD -> mode(SLASH_ARGS);
+RUN: RUN_WORD -> mode(SLASH_ARGS);
+CMD: CMD_WORD -> mode(SLASH_ARGS);
+LABEL: LABEL_WORD -> mode(SLASH_ARGS);
+EXPOSE: EXPOSE_WORD -> mode(SLASH_ARGS);
+ENV: ENV_WORD -> mode(SLASH_ARGS);
+ADD: ADD_WORD -> mode(SLASH_ARGS);
+COPY: COPY_WORD -> mode(SLASH_ARGS);
+ENTRYPOINT: ENTRYPOINT_WORD -> mode(SLASH_ARGS);
+VOLUME: VOLUME_WORD -> mode(SLASH_ARGS);
+USER: USER_WORD -> mode(SLASH_ARGS);
+WORKDIR: WORKDIR_WORD -> mode(SLASH_ARGS);
+ARG: ARG_WORD -> mode(SLASH_ARGS);
+ONBUILD: ONBUILD_WORD -> mode(SLASH_BODY);
+STOPSIGNAL: STOPSIGNAL_WORD -> mode(SLASH_ARGS);
+HEALTHCHECK: HEALTHCHECK_WORD -> mode(SLASH_ARGS);
+SHELL: SHELL_WORD -> mode(SLASH_ARGS);
 
-    private void handleComment() {
-        if (!parserDirectivesAllowed) {
-            skip();
-            return;
-        }
-
-        String text = getText();
-        java.util.regex.Matcher directive = PARSER_DIRECTIVE.matcher(
-            text.substring(text.indexOf('#') + 1).trim()
-        );
-        if (!directive.matches()) {
-            parserDirectivesAllowed = false;
-            skip();
-            return;
-        }
-
-        String name = directive.group(1).toLowerCase(java.util.Locale.ROOT);
-        if (!name.equals("syntax") && !name.equals("escape") && !name.equals("check")) {
-            parserDirectivesAllowed = false;
-            skip();
-            return;
-        }
-
-        String value = directive.group(2);
-        if (seenParserDirectives.contains(name)
-            || (name.equals("escape") && !value.equals("\\") && !value.equals("`"))) {
-            // Keep the token visible so invalid or repeated directives fail parsing.
-            return;
-        }
-
-        seenParserDirectives.add(name);
-        if (name.equals("escape")) {
-            escapeCharacter = value.charAt(0);
-        }
-        preserveDirectiveNewline = true;
-        skip();
-    }
-
-    private boolean isSingleLineBreak(String text) {
-        return text.equals("\n") || text.equals("\r") || text.equals("\r\n");
-    }
-
-    @Override
-    public org.antlr.v4.runtime.Token emit() {
-        if (_type == NL && preserveDirectiveNewline && isSingleLineBreak(getText())) {
-            preserveDirectiveNewline = false;
-        } else {
-            parserDirectivesAllowed = false;
-            preserveDirectiveNewline = false;
-        }
-        return super.emit();
-    }
-}
-
-// DEFAULT_MODE: Recognition of instruction keywords and comments at line start
-
-FROM: [fF][rR][oO][mM] -> mode(MODE_ARGS);
-RUN: [rR][uU][nN] -> mode(MODE_ARGS);
-CMD: [cC][mM][dD] -> mode(MODE_ARGS);
-LABEL: [lL][aA][bB][eE][lL] -> mode(MODE_ARGS);
-EXPOSE: [eE][xX][pP][oO][sS][eE] -> mode(MODE_ARGS);
-ENV: [eE][nN][vV] -> mode(MODE_ARGS);
-ADD: [aA][dD][dD] -> mode(MODE_ARGS);
-COPY: [cC][oO][pP][yY] -> mode(MODE_ARGS);
-ENTRYPOINT: [eE][nN][tT][rR][yY][pP][oO][iI][nN][tT] -> mode(MODE_ARGS);
-VOLUME: [vV][oO][lL][uU][mM][eE] -> mode(MODE_ARGS);
-USER: [uU][sS][eE][rR] -> mode(MODE_ARGS);
-WORKDIR: [wW][oO][rR][kK][dD][iI][rR] -> mode(MODE_ARGS);
-ARG: [aA][rR][gG] -> mode(MODE_ARGS);
-ONBUILD: [oO][nN][bB][uU][iI][lL][dD] -> mode(DEFAULT_MODE);
-STOPSIGNAL: [sS][tT][oO][pP][sS][iI][gG][nN][aA][lL] -> mode(MODE_ARGS);
-HEALTHCHECK: [hH][eE][aA][lL][tT][hH][cC][hH][eE][cC][kK] -> mode(MODE_ARGS);
-SHELL: [sS][hH][eE][lL][lL] -> mode(MODE_ARGS);
-
-// Top-level comments
-COMMENT: [ \t]* '#' ~[\r\n]* { handleComment(); };
-
-NL: ( '\r'? '\n' | '\r' )+;
+COMMENT: [ \t]* '#' ~[\r\n]* -> mode(SLASH_BODY), skip;
+NL: NEWLINE+ -> mode(SLASH_BODY);
 WS: [ \t]+ -> skip;
 
-mode MODE_ARGS;
-    // 1. Line continuation: the effective escape character followed by a newline
-    ARG_LINE_CONT
-        : { isEscapeCharacter(_input.LA(1)) }?
-          ('\\' | '`') [ \t]* ( '\r'? '\n' | '\r' ) -> skip
-        ;
+fragment ESCAPE_DIRECTIVE_PREFIX
+    : [ \t]* '#' [ \t]* ESCAPE_WORD [ \t]* '=' [ \t]*
+    ;
+fragment SYNTAX_DIRECTIVE_PREFIX
+    : [ \t]* '#' [ \t]* SYNTAX_WORD [ \t]* '=' [ \t]*
+    ;
+fragment CHECK_DIRECTIVE_PREFIX
+    : [ \t]* '#' [ \t]* CHECK_WORD [ \t]* '=' [ \t]*
+    ;
+fragment DIRECTIVE_VALUE: ~[ \t\r\n] ~[\r\n]*;
+fragment LINE_END: NEWLINE | EOF;
+fragment NEWLINE: '\r'? '\n' | '\r';
 
-    // 2. Comments inside instructions: only at the start of a line
-    // We match the newline of the previous line IF it wasn't escaped,
-    // OR we rely on the fact that if it was escaped, position is 0.
-    // Actually, if it was escaped, it was skipped, so position IS 0.
-    // If it WASN'T escaped, then ARG_NL would have triggered.
-    // So this rule only matches if the previous line ended with the effective escape.
-    ARG_COMMENT: { getCharPositionInLine() == 0 }? [ \t]* '#' ~[\r\n]* ( '\r'? '\n' | '\r' ) -> skip;
+fragment ESCAPE_WORD: [eE][sS][cC][aA][pP][eE];
+fragment SYNTAX_WORD: [sS][yY][nN][tT][aA][xX];
+fragment CHECK_WORD: [cC][hH][eE][cC][kK];
 
-    // 3. Newline: actual end of instruction
-    ARG_NL: [ \t]* ( '\r'? '\n' | '\r' ) -> mode(DEFAULT_MODE), type(NL);
+fragment FROM_WORD: [fF][rR][oO][mM];
+fragment RUN_WORD: [rR][uU][nN];
+fragment CMD_WORD: [cC][mM][dD];
+fragment LABEL_WORD: [lL][aA][bB][eE][lL];
+fragment EXPOSE_WORD: [eE][xX][pP][oO][sS][eE];
+fragment ENV_WORD: [eE][nN][vV];
+fragment ADD_WORD: [aA][dD][dD];
+fragment COPY_WORD: [cC][oO][pP][yY];
+fragment ENTRYPOINT_WORD: [eE][nN][tT][rR][yY][pP][oO][iI][nN][tT];
+fragment VOLUME_WORD: [vV][oO][lL][uU][mM][eE];
+fragment USER_WORD: [uU][sS][eE][rR];
+fragment WORKDIR_WORD: [wW][oO][rR][kK][dD][iI][rR];
+fragment ARG_WORD: [aA][rR][gG];
+fragment ONBUILD_WORD: [oO][nN][bB][uU][iI][lL][dD];
+fragment STOPSIGNAL_WORD: [sS][tT][oO][pP][sS][iI][gG][nN][aA][lL];
+fragment HEALTHCHECK_WORD: [hH][eE][aA][lL][tT][hH][cC][hH][eE][cC][kK];
+fragment SHELL_WORD: [sS][hH][eE][lL][lL];
 
-    // 4. Leading builder flags (parsed structurally by instructions that support them)
-    BUILDER_FLAG: '--' BUILDER_FLAG_PART+;
-    BUILDER_FLAG_TERMINATOR: '--';
+// Backtick remains selected while the parser-directive preamble is open.
+mode BACKTICK_PREAMBLE;
 
-    fragment BUILDER_FLAG_PART
-        : ~[\r\n \t"'\\#`]
-        | { getCharPositionInLine() > 0 }? '#'
-        | BUILDER_FLAG_ESCAPE
-        | BUILDER_FLAG_LITERAL_ESCAPE
-        | '"' (
-            ~["\\`\r\n]
-            | BUILDER_FLAG_ESCAPE
-            | BUILDER_FLAG_LITERAL_ESCAPE
-          )* '"'
-        | '\'' (
-            ~['\\`\r\n]
-            | BUILDER_FLAG_ESCAPE
-            | BUILDER_FLAG_LITERAL_ESCAPE
-          )* '\''
-        ;
+BACKTICK_PREAMBLE_BACKTICK_ESCAPE
+    : ESCAPE_DIRECTIVE_PREFIX '`' [ \t]* LINE_END
+      -> type(BACKTICK_ESCAPE_DIRECTIVE)
+    ;
+BACKTICK_PREAMBLE_BACKSLASH_ESCAPE
+    : ESCAPE_DIRECTIVE_PREFIX '\\' [ \t]* LINE_END
+      -> type(BACKSLASH_ESCAPE_DIRECTIVE), mode(DEFAULT_MODE)
+    ;
+BACKTICK_PREAMBLE_SYNTAX
+    : SYNTAX_DIRECTIVE_PREFIX DIRECTIVE_VALUE LINE_END
+      -> type(SYNTAX_DIRECTIVE)
+    ;
+BACKTICK_PREAMBLE_CHECK
+    : CHECK_DIRECTIVE_PREFIX DIRECTIVE_VALUE LINE_END
+      -> type(CHECK_DIRECTIVE)
+    ;
+BACKTICK_PREAMBLE_INVALID_ESCAPE
+    : ESCAPE_DIRECTIVE_PREFIX DIRECTIVE_VALUE LINE_END
+      -> type(INVALID_DIRECTIVE), mode(BACKTICK_BODY)
+    ;
 
-    fragment BUILDER_FLAG_ESCAPE
-        : { isEscapeCharacter(_input.LA(1)) }?
-          ('\\' | '`') ( [ \t]* ( '\r'? '\n' | '\r' ) | . )?
-        ;
+BACKTICK_PREAMBLE_FROM: FROM_WORD -> type(FROM), mode(BACKTICK_ARGS);
+BACKTICK_PREAMBLE_RUN: RUN_WORD -> type(RUN), mode(BACKTICK_ARGS);
+BACKTICK_PREAMBLE_CMD: CMD_WORD -> type(CMD), mode(BACKTICK_ARGS);
+BACKTICK_PREAMBLE_LABEL: LABEL_WORD -> type(LABEL), mode(BACKTICK_ARGS);
+BACKTICK_PREAMBLE_EXPOSE: EXPOSE_WORD -> type(EXPOSE), mode(BACKTICK_ARGS);
+BACKTICK_PREAMBLE_ENV: ENV_WORD -> type(ENV), mode(BACKTICK_ARGS);
+BACKTICK_PREAMBLE_ADD: ADD_WORD -> type(ADD), mode(BACKTICK_ARGS);
+BACKTICK_PREAMBLE_COPY: COPY_WORD -> type(COPY), mode(BACKTICK_ARGS);
+BACKTICK_PREAMBLE_ENTRYPOINT
+    : ENTRYPOINT_WORD -> type(ENTRYPOINT), mode(BACKTICK_ARGS)
+    ;
+BACKTICK_PREAMBLE_VOLUME: VOLUME_WORD -> type(VOLUME), mode(BACKTICK_ARGS);
+BACKTICK_PREAMBLE_USER: USER_WORD -> type(USER), mode(BACKTICK_ARGS);
+BACKTICK_PREAMBLE_WORKDIR: WORKDIR_WORD -> type(WORKDIR), mode(BACKTICK_ARGS);
+BACKTICK_PREAMBLE_ARG: ARG_WORD -> type(ARG), mode(BACKTICK_ARGS);
+BACKTICK_PREAMBLE_ONBUILD
+    : ONBUILD_WORD -> type(ONBUILD), mode(BACKTICK_BODY)
+    ;
+BACKTICK_PREAMBLE_STOPSIGNAL
+    : STOPSIGNAL_WORD -> type(STOPSIGNAL), mode(BACKTICK_ARGS)
+    ;
+BACKTICK_PREAMBLE_HEALTHCHECK
+    : HEALTHCHECK_WORD -> type(HEALTHCHECK), mode(BACKTICK_ARGS)
+    ;
+BACKTICK_PREAMBLE_SHELL: SHELL_WORD -> type(SHELL), mode(BACKTICK_ARGS);
 
-    fragment BUILDER_FLAG_LITERAL_ESCAPE
-        : { !isEscapeCharacter(_input.LA(1)) }? ('\\' | '`')
-        ;
+BACKTICK_PREAMBLE_COMMENT
+    : [ \t]* '#' ~[\r\n]* -> mode(BACKTICK_BODY), skip
+    ;
+BACKTICK_PREAMBLE_NL: NEWLINE+ -> type(NL), mode(BACKTICK_BODY);
+BACKTICK_PREAMBLE_WS: [ \t]+ -> skip;
 
-    // 5. JSON-like structures for exec form
-    LBRACKET: '[';
-    RBRACKET: ']';
-    COMMA: ',';
-    
-    // 6. Strings
-    STRING: '"' ( ~["\\] | '\\' . )* '"' | '\'' ( ~['\\] | '\\' . )* '\'';
-    
-    // 7. Keywords that might appear in arguments (e.g. CMD in HEALTHCHECK)
-    // We reuse the token types from DEFAULT_MODE if they appear here.
-    ARG_NONE: [nN][oO][nN][eE] -> type(NONE);
-    ARG_CMD: [cC][mM][dD] -> type(CMD);
+// Top-level instruction modes after the parser-directive preamble closes.
+mode SLASH_BODY;
 
-    // 8. General text
-    // Greedy match for most characters. Stop at anything that might have special meaning.
-    ARG_TEXT: ~[\r\n \t[\] ,"'#\\]+;
-    
-    // Whitespace within arguments
-    ARG_WS: [ \t]+ -> skip;
+SLASH_FROM: FROM_WORD -> type(FROM), mode(SLASH_ARGS);
+SLASH_RUN: RUN_WORD -> type(RUN), mode(SLASH_ARGS);
+SLASH_CMD: CMD_WORD -> type(CMD), mode(SLASH_ARGS);
+SLASH_LABEL: LABEL_WORD -> type(LABEL), mode(SLASH_ARGS);
+SLASH_EXPOSE: EXPOSE_WORD -> type(EXPOSE), mode(SLASH_ARGS);
+SLASH_ENV: ENV_WORD -> type(ENV), mode(SLASH_ARGS);
+SLASH_ADD: ADD_WORD -> type(ADD), mode(SLASH_ARGS);
+SLASH_COPY: COPY_WORD -> type(COPY), mode(SLASH_ARGS);
+SLASH_ENTRYPOINT: ENTRYPOINT_WORD -> type(ENTRYPOINT), mode(SLASH_ARGS);
+SLASH_VOLUME: VOLUME_WORD -> type(VOLUME), mode(SLASH_ARGS);
+SLASH_USER: USER_WORD -> type(USER), mode(SLASH_ARGS);
+SLASH_WORKDIR: WORKDIR_WORD -> type(WORKDIR), mode(SLASH_ARGS);
+SLASH_ARG: ARG_WORD -> type(ARG), mode(SLASH_ARGS);
+SLASH_ONBUILD: ONBUILD_WORD -> type(ONBUILD);
+SLASH_STOPSIGNAL: STOPSIGNAL_WORD -> type(STOPSIGNAL), mode(SLASH_ARGS);
+SLASH_HEALTHCHECK: HEALTHCHECK_WORD -> type(HEALTHCHECK), mode(SLASH_ARGS);
+SLASH_SHELL: SHELL_WORD -> type(SHELL), mode(SLASH_ARGS);
 
-    // 9. Fallbacks for single special characters
-    ARG_HASH: '#' -> type(ARG_TEXT);
-    ARG_BACKSLASH: '\\' -> type(ARG_TEXT);
-    ANY_OTHER: . -> type(ARG_TEXT);
+SLASH_COMMENT: [ \t]* '#' ~[\r\n]* -> skip;
+SLASH_NL: NEWLINE+ -> type(NL);
+SLASH_WS: [ \t]+ -> skip;
 
-// Token types for reuse
-NONE: [nN][oO][nN][eE];
+mode BACKTICK_BODY;
+
+BACKTICK_FROM: FROM_WORD -> type(FROM), mode(BACKTICK_ARGS);
+BACKTICK_RUN: RUN_WORD -> type(RUN), mode(BACKTICK_ARGS);
+BACKTICK_CMD: CMD_WORD -> type(CMD), mode(BACKTICK_ARGS);
+BACKTICK_LABEL: LABEL_WORD -> type(LABEL), mode(BACKTICK_ARGS);
+BACKTICK_EXPOSE: EXPOSE_WORD -> type(EXPOSE), mode(BACKTICK_ARGS);
+BACKTICK_ENV: ENV_WORD -> type(ENV), mode(BACKTICK_ARGS);
+BACKTICK_ADD: ADD_WORD -> type(ADD), mode(BACKTICK_ARGS);
+BACKTICK_COPY: COPY_WORD -> type(COPY), mode(BACKTICK_ARGS);
+BACKTICK_ENTRYPOINT
+    : ENTRYPOINT_WORD -> type(ENTRYPOINT), mode(BACKTICK_ARGS)
+    ;
+BACKTICK_VOLUME: VOLUME_WORD -> type(VOLUME), mode(BACKTICK_ARGS);
+BACKTICK_USER: USER_WORD -> type(USER), mode(BACKTICK_ARGS);
+BACKTICK_WORKDIR: WORKDIR_WORD -> type(WORKDIR), mode(BACKTICK_ARGS);
+BACKTICK_ARG: ARG_WORD -> type(ARG), mode(BACKTICK_ARGS);
+BACKTICK_ONBUILD: ONBUILD_WORD -> type(ONBUILD);
+BACKTICK_STOPSIGNAL
+    : STOPSIGNAL_WORD -> type(STOPSIGNAL), mode(BACKTICK_ARGS)
+    ;
+BACKTICK_HEALTHCHECK
+    : HEALTHCHECK_WORD -> type(HEALTHCHECK), mode(BACKTICK_ARGS)
+    ;
+BACKTICK_SHELL: SHELL_WORD -> type(SHELL), mode(BACKTICK_ARGS);
+
+BACKTICK_COMMENT: [ \t]* '#' ~[\r\n]* -> skip;
+BACKTICK_NL: NEWLINE+ -> type(NL);
+BACKTICK_WS: [ \t]+ -> skip;
+
+// Argument modes differ only where the selected escape character matters.
+mode SLASH_ARGS;
+
+ARG_LINE_CONT
+    : '\\' [ \t]* NEWLINE ([ \t]* '#' ~[\r\n]* NEWLINE)* -> skip
+    ;
+ARG_NL: [ \t]* NEWLINE -> type(NL), mode(SLASH_BODY);
+
+BUILDER_FLAG: '--' SLASH_BUILDER_FLAG_PART+;
+BUILDER_FLAG_TERMINATOR: '--';
+
+fragment SLASH_BUILDER_FLAG_PART
+    : ~[\r\n \t"'\\]
+    | SLASH_BUILDER_FLAG_ESCAPE
+    | '"' ( ~["\\\r\n] | SLASH_BUILDER_FLAG_ESCAPE )* '"'
+    | '\'' ( ~['\\\r\n] | SLASH_BUILDER_FLAG_ESCAPE )* '\''
+    ;
+fragment SLASH_BUILDER_FLAG_ESCAPE
+    : '\\' (
+        [ \t]* NEWLINE ([ \t]* '#' ~[\r\n]* NEWLINE)*
+        | .
+      )?
+    ;
+
+LBRACKET: '[';
+RBRACKET: ']';
+COMMA: ',';
+STRING: '"' ( ~["\\] | '\\' . )* '"' | '\'' ( ~['\\] | '\\' . )* '\'';
+ARG_NONE: [nN][oO][nN][eE] -> type(NONE);
+ARG_CMD: [cC][mM][dD] -> type(CMD);
+ARG_TEXT: ~[\r\n \t[\],"'#\\`]+;
+ARG_WS: [ \t]+ -> skip;
+ARG_HASH: '#' -> type(ARG_TEXT);
+ARG_BACKSLASH: '\\' -> type(ARG_TEXT);
+ARG_BACKTICK: '`' -> type(ARG_TEXT);
+ANY_OTHER: . -> type(ARG_TEXT);
+
+mode BACKTICK_ARGS;
+
+BACKTICK_ARG_LINE_CONT
+    : '`' [ \t]* NEWLINE ([ \t]* '#' ~[\r\n]* NEWLINE)* -> skip
+    ;
+BACKTICK_ARG_NL: [ \t]* NEWLINE -> type(NL), mode(BACKTICK_BODY);
+
+BACKTICK_BUILDER_FLAG
+    : '--' BACKTICK_BUILDER_FLAG_PART+ -> type(BUILDER_FLAG)
+    ;
+BACKTICK_BUILDER_FLAG_TERMINATOR: '--' -> type(BUILDER_FLAG_TERMINATOR);
+
+fragment BACKTICK_BUILDER_FLAG_PART
+    : ~[\r\n \t"'`]
+    | BACKTICK_BUILDER_FLAG_ESCAPE
+    | '"' ( ~["`\r\n] | BACKTICK_BUILDER_FLAG_ESCAPE )* '"'
+    | '\'' ( ~['`\r\n] | BACKTICK_BUILDER_FLAG_ESCAPE )* '\''
+    ;
+fragment BACKTICK_BUILDER_FLAG_ESCAPE
+    : '`' (
+        [ \t]* NEWLINE ([ \t]* '#' ~[\r\n]* NEWLINE)*
+        | .
+      )?
+    ;
+
+BACKTICK_LBRACKET: '[' -> type(LBRACKET);
+BACKTICK_RBRACKET: ']' -> type(RBRACKET);
+BACKTICK_COMMA: ',' -> type(COMMA);
+BACKTICK_STRING
+    : (
+        '"' ( ~["\\] | '\\' . )* '"'
+        | '\'' ( ~['\\] | '\\' . )* '\''
+      ) -> type(STRING)
+    ;
+BACKTICK_ARG_NONE: [nN][oO][nN][eE] -> type(NONE);
+BACKTICK_ARG_CMD: [cC][mM][dD] -> type(CMD);
+BACKTICK_ARG_TEXT: ~[\r\n \t[\],"'#\\`]+ -> type(ARG_TEXT);
+BACKTICK_ARG_WS: [ \t]+ -> skip;
+BACKTICK_ARG_HASH: '#' -> type(ARG_TEXT);
+BACKTICK_ARG_BACKSLASH: '\\' -> type(ARG_TEXT);
+BACKTICK_ARG_BACKTICK: '`' -> type(ARG_TEXT);
+BACKTICK_ANY_OTHER: . -> type(ARG_TEXT);

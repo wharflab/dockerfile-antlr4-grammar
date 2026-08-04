@@ -57,7 +57,7 @@ public final class AstDump {
 
         DockerfileParser.DockerfileContext tree = parser.dockerfile();
         tokens.fill();
-        escapeToken = lexer.getEscapeCharacter();
+        escapeToken = effectiveEscapeToken();
         lineContinuation = Pattern.compile(
             Pattern.quote(Character.toString(escapeToken))
                 + "[ \\t]*(?:\\r?\\n|\\r)"
@@ -77,6 +77,18 @@ public final class AstDump {
 
         byte[] output = Json.write(document).getBytes(StandardCharsets.UTF_8);
         System.out.write(output, 0, output.length);
+    }
+
+    private static char effectiveEscapeToken() {
+        for (Token token : tokens.getTokens()) {
+            if (token.getType() == DockerfileLexer.BACKTICK_ESCAPE_DIRECTIVE) {
+                return '`';
+            }
+            if (token.getType() == DockerfileLexer.BACKSLASH_ESCAPE_DIRECTIVE) {
+                return '\\';
+            }
+        }
+        return '\\';
     }
 
     private static Instruction toInstruction(DockerfileParser.InstructionContext wrapper) {
@@ -194,14 +206,14 @@ public final class AstDump {
         int charStart = codePointOffsets[start];
         int charEnd = codePointOffsets[Math.min(end, codePointOffsets.length - 1)];
         String gap = source.substring(charStart, charEnd);
-        gap = lineContinuation.matcher(gap).replaceAll("");
         gap = CONTINUATION_COMMENT.matcher(gap).replaceAll("");
+        gap = lineContinuation.matcher(gap).replaceAll("");
         return !gap.isEmpty();
     }
 
     private static String logicalTokenText(String value) {
-        value = lineContinuation.matcher(value).replaceAll("");
-        return CONTINUATION_COMMENT.matcher(value).replaceAll("");
+        value = CONTINUATION_COMMENT.matcher(value).replaceAll("");
+        return lineContinuation.matcher(value).replaceAll("");
     }
 
     private static int[] codePointOffsets(String value) {
