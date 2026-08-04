@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   parity:
-    name: Compare all Dockerfile fixtures
+    name: Compare direct AST projections
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -41,7 +41,7 @@ jobs:
           go-version-file: tools/buildkit-ast/go.mod
           cache-dependency-path: tools/buildkit-ast/go.sum
 
-      - name: Compare ASTs
+      - name: Compare ASTs without normalization
         run: >-
           ./scripts/compare_ast.sh
           --keep .ast-diff

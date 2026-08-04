@@ -3,9 +3,10 @@
 # Compare this repository's Dockerfile parse tree with the low-level AST from
 # BuildKit's official frontend/dockerfile/parser package.
 #
-# Both parser-specific trees are projected into the same JSON schema before
-# comparison. Exit 0 means every file matched (or both parsers rejected it),
-# exit 1 means a parser/AST mismatch, and exit 2 means a tooling failure.
+# Both parser-specific trees are projected into the same JSON schema using only
+# parser-owned values. The adapters do not normalize source text. Exit 0 means
+# every file matched (or both parsers rejected it), exit 1 means a parser/AST
+# mismatch, and exit 2 means a tooling failure.
 
 set -uo pipefail
 

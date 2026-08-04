@@ -167,6 +167,8 @@ echo "Parsing fixtures in ${TESTS_DIR#"$REPO_ROOT"/}/..."
 
 pass=0
 fail=0
+edge_pass=0
+edge_fail=0
 failed_files=""
 stderr_file="$(mktemp)"
 trap 'rm -f "$stderr_file"' EXIT
@@ -203,13 +205,55 @@ for f in "${fixtures[@]}"; do
     fi
 done
 
+echo
+echo "Checking parser-directive edge cases..."
+
+check_directive_case() {
+    name="$1"
+    expectation="$2"
+    source="$3"
+
+    : >"$stderr_file"
+    rc=0
+    printf '%s' "$source" |
+        java -cp "$ANTLR_JAR:$GEN_DIR" org.antlr.v4.gui.TestRig \
+            Dockerfile dockerfile -encoding UTF-8 \
+            >/dev/null 2>"$stderr_file" || rc=$?
+
+    matched=""
+    if [ "$rc" -eq 0 ]; then
+        case "$expectation" in
+            accept) [ ! -s "$stderr_file" ] && matched=1 ;;
+            reject) [ -s "$stderr_file" ] && matched=1 ;;
+        esac
+    fi
+
+    if [ -n "$matched" ]; then
+        edge_pass=$((edge_pass + 1))
+        printf '  ok    %s\n' "$name"
+    else
+        edge_fail=$((edge_fail + 1))
+        failed_files="$failed_files  $name"$'\n'
+        printf '  FAIL  %s (expected %s)\n' "$name" "$expectation"
+        [ "$rc" -eq 0 ] || printf '          (java exited %s)\n' "$rc"
+        sed 's/^/          /' "$stderr_file"
+    fi
+}
+
+check_directive_case \
+    "empty escape directive" accept \
+    $'# escape=\nFROM alpine\n'
+check_directive_case \
+    "whitespace-only escape directive" reject \
+    $'# escape=   \nFROM alpine\n'
+
 # --- Summary -----------------------------------------------------------------
 
 echo
-if [ "$fail" -eq 0 ]; then
-    echo "All $pass fixture(s) parsed cleanly."
+if [ "$fail" -eq 0 ] && [ "$edge_fail" -eq 0 ]; then
+    echo "All $pass fixture(s) parsed cleanly; all $edge_pass edge case(s) passed."
     exit 0
 fi
 
-printf '%s of %s fixture(s) failed to parse:\n%s' "$fail" "$((pass + fail))" "$failed_files"
+printf '%s validation(s) failed:\n%s' "$((fail + edge_fail))" "$failed_files"
 exit 1

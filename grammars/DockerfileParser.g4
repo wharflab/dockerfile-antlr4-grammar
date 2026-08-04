@@ -2,7 +2,27 @@ parser grammar DockerfileParser;
 
 options { tokenVocab=DockerfileLexer; }
 
-dockerfile: (element)* EOF;
+dockerfile: parser_directives? (element)* EOF;
+
+parser_directives
+    : SYNTAX_DIRECTIVE (
+        escape_directive CHECK_DIRECTIVE?
+        | CHECK_DIRECTIVE escape_directive?
+      )?
+    | escape_directive (
+        SYNTAX_DIRECTIVE CHECK_DIRECTIVE?
+        | CHECK_DIRECTIVE SYNTAX_DIRECTIVE?
+      )?
+    | CHECK_DIRECTIVE (
+        SYNTAX_DIRECTIVE escape_directive?
+        | escape_directive SYNTAX_DIRECTIVE?
+      )?
+    ;
+
+escape_directive
+    : BACKTICK_ESCAPE_DIRECTIVE
+    | BACKSLASH_ESCAPE_DIRECTIVE
+    ;
 
 element
     : instruction
@@ -71,14 +91,30 @@ builder_flags
     | BUILDER_FLAG_TERMINATOR
     ;
 
-json_array: LBRACKET (STRING (COMMA STRING)*)? RBRACKET;
+json_array
+    : LBRACKET (string_value (COMMA string_value)*)? RBRACKET
+    ;
+
+string_value
+    : STRING
+    | STRING_START STRING_TEXT* STRING_END
+    ;
+
+unterminated_string_value
+    : STRING_START STRING_TEXT*
+    ;
+
+argument_string_value
+    : string_value
+    | unterminated_string_value
+    ;
 
 arguments
     : (
         ARG_TEXT
         | BUILDER_FLAG
         | BUILDER_FLAG_TERMINATOR
-        | STRING
+        | argument_string_value
         | LBRACKET
         | RBRACKET
         | COMMA

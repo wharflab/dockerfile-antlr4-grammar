@@ -11,7 +11,8 @@ This project provides a comprehensive ANTLR4 grammar for Dockerfiles.
   - Support for nested blocks, lists (block and flow), and key-value pairs.
 - **Form Support:** Handles both shell form and exec form (`[...]`) for instructions.
 - **Builder Flags:** Captures leading flags on `FROM`, `RUN`, `ADD`, `COPY`, and `HEALTHCHECK`.
-- **Line Continuations:** Correctly handles multi-line instructions using `\` continuation character.
+- **Parser Directives:** Honors top-of-file `# escape=\` and ``# escape=` `` directives.
+- **Line Continuations:** Uses the effective `\` or backtick escape character for multi-line instructions.
 - **Comments:** Supports single-line comments starting with `#`.
 
 ## Files
@@ -59,10 +60,18 @@ scripts/compare_ast.sh --keep .ast-diff tests/*.dockerfile
 ```
 
 The adapters project both parser-specific trees into a common JSON document:
-instruction name, text or JSON arguments, builder flags, `ONBUILD` children,
-heredocs, effective escape token, and source lines. Comments and parser warnings
-are not part of the comparison. A unified JSON diff is printed for every
-mismatch; `--keep` retains both projections and their diagnostics.
+instruction name, argument kind and values, builder flags, nested instructions,
+heredocs, effective escape token, and source lines. The projection is
+deliberately literal:
+
+- BuildKit values come directly from `parser.Node` fields.
+- ANTLR values come directly from emitted tokens and parse-tree structure.
+- Neither adapter rereads source text or normalizes whitespace, continuations,
+  quoting, escapes, or argument grouping.
+
+Comments and parser warnings are not part of the comparison. A unified JSON
+diff is printed for every mismatch; `--keep` retains both projections and their
+diagnostics.
 
 The command exits `0` when all ASTs match or both parsers reject an input, `1`
 for an acceptance or AST difference, and `2` for a tooling failure. In addition
@@ -71,12 +80,15 @@ in `tools/buildkit-ast/go.mod`. The BuildKit dependency is pinned there so
 comparisons are reproducible.
 
 CI runs the strict comparison over every fixture. Any acceptance or AST
-difference fails the workflow.
+difference fails the workflow. The current honest baseline is 16 AST
+differences across 17 fixtures; only `tests/healthcheck-none.dockerfile`
+matches. Common differences include shell-argument grouping and whitespace,
+JSON string decoding, and builder-flag escape and quote handling. The workflow
+is intentionally red until those differences are fixed in the grammar.
 
-`tests/escape-directive.dockerfile` records that parser directives are currently
-comments to the ANTLR lexer: it retains the grammar's backslash escape token
-while BuildKit switches to backtick. The fixture remains in strict CI with no
-allowlist, so this unsupported feature is reported as a parity failure.
+The escape-directive fixtures cover directive scope, backtick continuations,
+escaped argument text, and builder flags. The effective escape token comes from
+the lexer and is included in the projected AST.
 
 `testdata/ast-parity/heredoc.dockerfile` is an intentional mismatch corpus:
 BuildKit accepts it and attaches the heredoc to the `RUN` node, while the
@@ -84,7 +96,11 @@ current ANTLR grammar rejects the heredoc body.
 
 ## Grammar Design
 
-The grammar uses a `DEFAULT_MODE` to recognize instruction keywords at the start of a line. Once a keyword is found, it switches to `MODE_ARGS` to consume the rest of the line as arguments. This ensures that keywords like `RUN` or `CMD` appearing inside a shell command are treated as literal text rather than new instructions.
+The lexer starts in `DEFAULT_MODE` for the parser-directive preamble, then uses
+separate backslash and backtick body and argument modes. Once an instruction
+keyword is found, its argument mode consumes the rest of the logical line. This
+keeps words such as `RUN` or `CMD` inside shell commands as argument text while
+letting the selected escape character control continuations.
 
 `HEALTHCHECK` and `ONBUILD` are handled specially to allow recursive instruction recognition (e.g., `HEALTHCHECK CMD ...`).
 
