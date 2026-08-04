@@ -55,7 +55,7 @@ The same script runs in CI on every pull request (`.github/workflows/tests.yml`)
 BuildKit's `frontend/dockerfile/parser` Go package:
 
 ```bash
-scripts/compare_ast.sh testdata/ast-parity/basic.dockerfile
+scripts/compare_ast.sh tests/arguments.dockerfile
 scripts/compare_ast.sh --keep .ast-diff tests/*.dockerfile
 ```
 
@@ -80,11 +80,17 @@ in `tools/buildkit-ast/go.mod`. The BuildKit dependency is pinned there so
 comparisons are reproducible.
 
 CI runs the strict comparison over every fixture. Any acceptance or AST
-difference fails the workflow. The current honest baseline is 16 AST
-differences across 17 fixtures; only `tests/healthcheck-none.dockerfile`
-matches. Common differences include shell-argument grouping and whitespace,
-JSON string decoding, and builder-flag escape and quote handling. The workflow
-is intentionally red until those differences are fixed in the grammar.
+difference fails the workflow. The current honest baseline is 11 AST
+differences across 19 fixtures. The remaining differences are JSON string
+decoding, builder-flag escape and quote handling, and the source location of a
+nested `ONBUILD` instruction. The workflow is intentionally red until those
+differences are fixed in the grammar.
+
+`tests/arguments.dockerfile` and `tests/argument-edges.dockerfile` cover
+BuildKit's command-specific argument nodes: opaque shell text, raw
+whitespace-delimited lists, quote- and escape-aware words, `ENV`/`LABEL`
+key-value triples, and `HEALTHCHECK` type plus command values. CI compares this
+matching subset separately before running the intentionally strict full corpus.
 
 The escape-directive fixtures cover directive scope, backtick continuations,
 escaped argument text, and builder flags. The effective escape token comes from
@@ -101,6 +107,12 @@ separate backslash and backtick body and argument modes. Once an instruction
 keyword is found, its argument mode consumes the rest of the logical line. This
 keeps words such as `RUN` or `CMD` inside shell commands as argument text while
 letting the selected escape character control continuations.
+
+Parser rules then mirror BuildKit's command dispatch. Shell-form commands retain
+one argument value with internal whitespace, list-form commands split on raw
+whitespace, and `ARG`/`ENV`/`LABEL` use quote- and escape-aware words. These
+groupings are visible in the parse tree, so the parity adapter does not need to
+reread or normalize source text.
 
 `HEALTHCHECK` and `ONBUILD` are handled specially to allow recursive instruction recognition (e.g., `HEALTHCHECK CMD ...`).
 

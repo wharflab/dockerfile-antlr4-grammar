@@ -52,56 +52,68 @@ instruction
     ;
 
 from_inst
-    : FROM builder_flags arguments NL
-    | FROM arguments NL
+    : FROM argument_preamble argument_list NL
     ;
 run_inst
-    : RUN builder_flags (json_array | arguments)? NL
-    | RUN (json_array | arguments) NL
+    : RUN argument_preamble (json_array | shell_argument)? NL
     ;
-cmd_inst: CMD (json_array | arguments) NL;
-label_inst: LABEL arguments NL;
-expose_inst: EXPOSE arguments NL;
-env_inst: ENV arguments NL;
+cmd_inst: CMD argument_preamble (json_array | shell_argument) NL;
+label_inst: LABEL argument_preamble name_value_arguments NL;
+expose_inst: EXPOSE argument_preamble argument_list NL;
+env_inst: ENV argument_preamble name_value_arguments NL;
 add_inst
-    : ADD builder_flags (json_array | arguments) NL
-    | ADD (json_array | arguments) NL
+    : ADD argument_preamble (json_array | argument_list) NL
     ;
 copy_inst
-    : COPY builder_flags (json_array | arguments) NL
-    | COPY (json_array | arguments) NL
+    : COPY argument_preamble (json_array | argument_list) NL
     ;
-entrypoint_inst: ENTRYPOINT (json_array | arguments) NL;
-volume_inst: VOLUME (json_array | arguments) NL;
-user_inst: USER arguments NL;
-workdir_inst: WORKDIR arguments NL;
-arg_inst: ARG arguments NL;
+entrypoint_inst
+    : ENTRYPOINT argument_preamble (json_array | shell_argument) NL
+    ;
+volume_inst: VOLUME argument_preamble (json_array | argument_list) NL;
+user_inst: USER argument_preamble shell_argument NL;
+workdir_inst: WORKDIR argument_preamble shell_argument NL;
+arg_inst: ARG argument_preamble word_list NL;
 onbuild_inst: ONBUILD (instruction | NL);
-stopsignal_inst: STOPSIGNAL arguments NL;
+stopsignal_inst: STOPSIGNAL argument_preamble shell_argument NL;
 healthcheck_inst
-    : HEALTHCHECK builder_flags NONE NL
-    | HEALTHCHECK NONE NL
-    | HEALTHCHECK builder_flags arguments? instruction
-    | HEALTHCHECK arguments? instruction
+    : HEALTHCHECK argument_preamble NONE NL
+    | HEALTHCHECK argument_preamble healthcheck_command NL
     ;
-shell_inst: SHELL json_array NL;
+shell_inst: SHELL argument_preamble json_array NL;
+
+healthcheck_command
+    : CMD (ARG_WS+ (json_array | shell_argument))?
+    ;
+
+argument_preamble
+    : ARG_WS+ builder_flags ARG_WS*
+    | ARG_WS+
+    ;
 
 builder_flags
-    : BUILDER_FLAG+ BUILDER_FLAG_TERMINATOR?
+    : BUILDER_FLAG (
+        ARG_WS+ BUILDER_FLAG
+      )* (
+        ARG_WS+ BUILDER_FLAG_TERMINATOR
+      )?
     | BUILDER_FLAG_TERMINATOR
     ;
 
 json_array
-    : LBRACKET (string_value (COMMA string_value)*)? RBRACKET
+    : LBRACKET ARG_WS* (
+        string_value ARG_WS* (
+            COMMA ARG_WS* string_value ARG_WS*
+        )*
+      )? RBRACKET
     ;
 
 string_value
-    : STRING
-    | STRING_START STRING_TEXT* STRING_END
+    : STRING_START (STRING_TEXT | ARG_WS | ESCAPE)* STRING_END
     ;
 
 unterminated_string_value
-    : STRING_START STRING_TEXT*
+    : STRING_START (STRING_TEXT | ARG_WS | ESCAPE)*
     ;
 
 argument_string_value
@@ -109,16 +121,80 @@ argument_string_value
     | unterminated_string_value
     ;
 
-arguments
-    : (
-        ARG_TEXT
-        | BUILDER_FLAG
-        | BUILDER_FLAG_TERMINATOR
-        | argument_string_value
-        | LBRACKET
-        | RBRACKET
-        | COMMA
-        | NONE
-        | CMD
-      )+
+// BuildKit keeps shell-form text as one node, but splits list-form arguments
+// on raw whitespace even when that whitespace appears inside quotes.
+shell_argument
+    : (list_atom | ARG_WS)+
+    ;
+
+argument_list
+    : list_argument (ARG_WS+ list_argument)*
+    ;
+
+list_argument
+    : list_atom+
+    ;
+
+word_list
+    : argument_word (ARG_WS+ argument_word)*
+    ;
+
+// ARG, ENV, and LABEL use quote- and escape-aware words instead of raw splits.
+argument_word
+    : argument_atom+
+    ;
+
+name_value_arguments
+    : name_value_pair (ARG_WS+ name_value_pair)*
+    | argument_name ARG_WS+ shell_argument
+    ;
+
+name_value_pair
+    : argument_name EQUALS assignment_value?
+    ;
+
+argument_name
+    : word_atom+
+    ;
+
+assignment_value
+    : argument_word
+    ;
+
+argument_atom
+    : word_atom
+    | EQUALS
+    ;
+
+word_atom
+    : ARG_TEXT
+    | BUILDER_FLAG
+    | BUILDER_FLAG_TERMINATOR
+    | argument_string_value
+    | escaped_whitespace
+    | LBRACKET
+    | RBRACKET
+    | COMMA
+    | NONE
+    | CMD
+    ;
+
+escaped_whitespace
+    : ESCAPE ARG_WS
+    ;
+
+list_atom
+    : ARG_TEXT
+    | BUILDER_FLAG
+    | BUILDER_FLAG_TERMINATOR
+    | STRING_START
+    | STRING_TEXT
+    | STRING_END
+    | ESCAPE
+    | LBRACKET
+    | RBRACKET
+    | COMMA
+    | EQUALS
+    | NONE
+    | CMD
     ;

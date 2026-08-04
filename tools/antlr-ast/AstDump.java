@@ -94,14 +94,30 @@ public final class AstDump {
             context.getStop().getLine()
         );
 
-        DockerfileParser.Builder_flagsContext builderFlags = directBuilderFlags(context);
+        DockerfileParser.Argument_preambleContext preamble = directChild(
+            context,
+            DockerfileParser.Argument_preambleContext.class
+        );
+        DockerfileParser.Builder_flagsContext builderFlags = preamble == null
+            ? null
+            : directChild(preamble, DockerfileParser.Builder_flagsContext.class);
         if (builderFlags != null) {
             for (TerminalNode flag : builderFlags.BUILDER_FLAG()) {
                 instruction.flags.add(flag.getText());
             }
         }
 
-        DockerfileParser.Json_arrayContext json = directJsonArray(context);
+        DockerfileParser.Json_arrayContext json = directChild(
+            context,
+            DockerfileParser.Json_arrayContext.class
+        );
+        DockerfileParser.Healthcheck_commandContext healthcheck = directChild(
+            context,
+            DockerfileParser.Healthcheck_commandContext.class
+        );
+        if (json == null && healthcheck != null) {
+            json = directChild(healthcheck, DockerfileParser.Json_arrayContext.class);
+        }
         instruction.argumentKind = json == null ? "text" : "json";
         addDirectArguments(context, commandToken, instruction.arguments);
 
@@ -127,68 +143,115 @@ public final class AstDump {
             return;
         }
         for (ParseTree child : context.children) {
-            if (child instanceof DockerfileParser.ArgumentsContext) {
-                addArgumentValues(
-                    (DockerfileParser.ArgumentsContext) child,
+            if (child instanceof DockerfileParser.Shell_argumentContext) {
+                arguments.add(child.getText());
+            } else if (child instanceof DockerfileParser.Argument_listContext) {
+                addArgumentList(
+                    (DockerfileParser.Argument_listContext) child,
+                    arguments
+                );
+            } else if (child instanceof DockerfileParser.Word_listContext) {
+                addWordList(
+                    (DockerfileParser.Word_listContext) child,
+                    arguments
+                );
+            } else if (child instanceof DockerfileParser.Name_value_argumentsContext) {
+                addNameValueArguments(
+                    (DockerfileParser.Name_value_argumentsContext) child,
+                    arguments
+                );
+            } else if (child instanceof DockerfileParser.Healthcheck_commandContext) {
+                addHealthcheckArguments(
+                    (DockerfileParser.Healthcheck_commandContext) child,
                     arguments
                 );
             } else if (child instanceof DockerfileParser.Json_arrayContext) {
-                for (DockerfileParser.String_valueContext string :
-                    ((DockerfileParser.Json_arrayContext) child).string_value()) {
-                    arguments.add(string.getText());
-                }
+                addJsonArguments(
+                    (DockerfileParser.Json_arrayContext) child,
+                    arguments
+                );
             } else if (child instanceof TerminalNode) {
                 Token token = ((TerminalNode) child).getSymbol();
-                if (token != command
-                    && token.getType() != Token.EOF
-                    && token.getType() != DockerfileLexer.NL) {
+                if (token != command && token.getType() == DockerfileLexer.NONE) {
                     arguments.add(token.getText());
                 }
             }
         }
     }
 
-    private static void addArgumentValues(
-        DockerfileParser.ArgumentsContext context,
+    private static void addArgumentList(
+        DockerfileParser.Argument_listContext context,
         List<String> values
     ) {
-        if (context.children == null) {
+        for (DockerfileParser.List_argumentContext argument :
+            context.list_argument()) {
+            values.add(argument.getText());
+        }
+    }
+
+    private static void addWordList(
+        DockerfileParser.Word_listContext context,
+        List<String> values
+    ) {
+        for (DockerfileParser.Argument_wordContext word : context.argument_word()) {
+            values.add(word.getText());
+        }
+    }
+
+    private static void addNameValueArguments(
+        DockerfileParser.Name_value_argumentsContext context,
+        List<String> values
+    ) {
+        List<DockerfileParser.Name_value_pairContext> pairs =
+            context.name_value_pair();
+        if (!pairs.isEmpty()) {
+            for (DockerfileParser.Name_value_pairContext pair : pairs) {
+                values.add(pair.argument_name().getText());
+                DockerfileParser.Assignment_valueContext value =
+                    pair.assignment_value();
+                values.add(value == null ? "" : value.getText());
+                values.add(pair.EQUALS().getText());
+            }
             return;
         }
-        for (ParseTree child : context.children) {
-            if (child instanceof TerminalNode) {
-                values.add(child.getText());
-            } else if (
-                child instanceof DockerfileParser.Argument_string_valueContext
-            ) {
-                values.add(child.getText());
-            }
+
+        values.add(context.argument_name().getText());
+        values.add(context.shell_argument().getText());
+        values.add("");
+    }
+
+    private static void addHealthcheckArguments(
+        DockerfileParser.Healthcheck_commandContext context,
+        List<String> values
+    ) {
+        values.add(context.CMD().getText());
+        DockerfileParser.Json_arrayContext json = context.json_array();
+        if (json != null) {
+            addJsonArguments(json, values);
+        } else if (context.shell_argument() != null) {
+            values.add(context.shell_argument().getText());
         }
     }
 
-    private static DockerfileParser.Builder_flagsContext directBuilderFlags(
-        ParserRuleContext context
+    private static void addJsonArguments(
+        DockerfileParser.Json_arrayContext context,
+        List<String> values
+    ) {
+        for (DockerfileParser.String_valueContext string : context.string_value()) {
+            values.add(string.getText());
+        }
+    }
+
+    private static <T extends ParseTree> T directChild(
+        ParserRuleContext context,
+        Class<T> type
     ) {
         if (context.children == null) {
             return null;
         }
         for (ParseTree child : context.children) {
-            if (child instanceof DockerfileParser.Builder_flagsContext) {
-                return (DockerfileParser.Builder_flagsContext) child;
-            }
-        }
-        return null;
-    }
-
-    private static DockerfileParser.Json_arrayContext directJsonArray(
-        ParserRuleContext context
-    ) {
-        if (context.children == null) {
-            return null;
-        }
-        for (ParseTree child : context.children) {
-            if (child instanceof DockerfileParser.Json_arrayContext) {
-                return (DockerfileParser.Json_arrayContext) child;
+            if (type.isInstance(child)) {
+                return type.cast(child);
             }
         }
         return null;

@@ -41,7 +41,13 @@ jobs:
           go-version-file: tools/buildkit-ast/go.mod
           cache-dependency-path: tools/buildkit-ast/go.sum
 
-      - name: Compare ASTs without normalization
+      - name: Verify implemented argument parity
+        run: >-
+          ./scripts/compare_ast.sh
+          tests/argument-edges.dockerfile
+          tests/arguments.dockerfile
+
+      - name: Compare all ASTs without normalization
         run: >-
           ./scripts/compare_ast.sh
           --keep .ast-diff
