@@ -102,7 +102,8 @@ public final class AstDump {
             ? null
             : directChild(preamble, DockerfileParser.Builder_flagsContext.class);
         if (builderFlags != null) {
-            for (TerminalNode flag : builderFlags.BUILDER_FLAG()) {
+            for (DockerfileParser.Builder_flagContext flag :
+                builderFlags.builder_flag()) {
                 instruction.flags.add(flag.getText());
             }
         }
