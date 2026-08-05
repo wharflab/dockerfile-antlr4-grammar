@@ -95,13 +95,17 @@ builder_flags
     : builder_flag (
         ARG_WS+ builder_flag
       )* (
-        ARG_WS+ BUILDER_FLAG_TERMINATOR
+        ARG_WS+ builder_flag_terminator
       )?
-    | BUILDER_FLAG_TERMINATOR
+    | builder_flag_terminator
     ;
 
 builder_flag
     : BUILDER_FLAG_START BUILDER_FLAG_TEXT+
+    ;
+
+builder_flag_terminator
+    : BUILDER_FLAG_START
     ;
 
 json_array

@@ -19,6 +19,11 @@ RUN --"
 RUN --'
 RUN --`
  true
+RUN --`
+`
+ true
+RUN --""`
+ true
 CMD -- --option="quoted value"
 ADD --chown="1000:1000" source /add/
 COPY --chmod="0755" source /dest/
