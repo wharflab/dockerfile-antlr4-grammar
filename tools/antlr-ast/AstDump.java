@@ -239,8 +239,101 @@ public final class AstDump {
     ) {
         for (DockerfileParser.Json_string_valueContext string :
             context.json_string_value()) {
-            values.add(string.getText());
+            values.add(jsonStringValue(string));
         }
+    }
+
+    private static String jsonStringValue(
+        DockerfileParser.Json_string_valueContext context
+    ) {
+        StringBuilder value = new StringBuilder();
+        for (ParseTree child : context.children) {
+            if (child instanceof TerminalNode) {
+                Token token = ((TerminalNode) child).getSymbol();
+                if (
+                    token.getType() == DockerfileLexer.JSON_STRING_TEXT
+                    || token.getType() == DockerfileLexer.JSON_STRING_SPACE
+                ) {
+                    value.append(token.getText());
+                }
+            } else if (child instanceof DockerfileParser.Json_string_escapeContext) {
+                appendJsonEscape(
+                    value,
+                    ((DockerfileParser.Json_string_escapeContext) child)
+                        .getStart()
+                );
+            }
+        }
+        return replaceInvalidSurrogates(value);
+    }
+
+    // Escape meaning is grammar-owned: each alternative has a distinct token
+    // type, so this projection never has to parse an unstructured string.
+    private static void appendJsonEscape(StringBuilder value, Token token) {
+        switch (token.getType()) {
+            case DockerfileLexer.JSON_STRING_ESCAPE_QUOTE:
+                value.append('"');
+                return;
+            case DockerfileLexer.JSON_STRING_ESCAPE_BACKSLASH:
+                value.append('\\');
+                return;
+            case DockerfileLexer.JSON_STRING_ESCAPE_SLASH:
+                value.append('/');
+                return;
+            case DockerfileLexer.JSON_STRING_ESCAPE_BACKSPACE:
+                value.append('\b');
+                return;
+            case DockerfileLexer.JSON_STRING_ESCAPE_FORM_FEED:
+                value.append('\f');
+                return;
+            case DockerfileLexer.JSON_STRING_ESCAPE_NEWLINE:
+                value.append('\n');
+                return;
+            case DockerfileLexer.JSON_STRING_ESCAPE_CARRIAGE_RETURN:
+                value.append('\r');
+                return;
+            case DockerfileLexer.JSON_STRING_ESCAPE_TAB:
+                value.append('\t');
+                return;
+            case DockerfileLexer.JSON_STRING_ESCAPE_UNICODE:
+                value.append(jsonUnicodeCodeUnit(token));
+                return;
+            default:
+                throw new IllegalStateException(
+                    "unexpected JSON escape token: " + token.getText()
+                );
+        }
+    }
+
+    private static char jsonUnicodeCodeUnit(Token token) {
+        String text = token.getText();
+        int value = 0;
+        for (int index = 2; index < text.length(); index++) {
+            value = (value << 4) | Character.digit(text.charAt(index), 16);
+        }
+        return (char) value;
+    }
+
+    private static String replaceInvalidSurrogates(CharSequence value) {
+        StringBuilder result = new StringBuilder(value.length());
+        for (int index = 0; index < value.length(); index++) {
+            char current = value.charAt(index);
+            if (Character.isHighSurrogate(current)) {
+                if (
+                    index + 1 < value.length()
+                    && Character.isLowSurrogate(value.charAt(index + 1))
+                ) {
+                    result.append(current).append(value.charAt(++index));
+                } else {
+                    result.append('\uFFFD');
+                }
+            } else if (Character.isLowSurrogate(current)) {
+                result.append('\uFFFD');
+            } else {
+                result.append(current);
+            }
+        }
+        return result.toString();
     }
 
     private static <T extends ParseTree> T directChild(

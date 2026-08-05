@@ -66,8 +66,9 @@ deliberately literal:
 
 - BuildKit values come directly from `parser.Node` fields.
 - ANTLR values come directly from emitted tokens and parse-tree structure.
-- Neither adapter rereads source text or normalizes whitespace, continuations,
-  quoting, escapes, or argument grouping.
+- Neither adapter rereads source text or applies ad hoc normalization.
+  Whitespace, continuations, quoting, escapes, and argument grouping must be
+  represented in the grammar before the ANTLR adapter can project them.
 
 Comments and parser warnings are not part of the comparison. A unified JSON
 diff is printed for every mismatch; `--keep` retains both projections and their
@@ -80,10 +81,10 @@ in `tools/buildkit-ast/go.mod`. The BuildKit dependency is pinned there so
 comparisons are reproducible.
 
 CI runs the strict comparison over every fixture. Any acceptance or AST
-difference fails the workflow. The current honest baseline is 11 AST
-differences across 19 fixtures. The remaining differences are JSON string
-decoding, builder-flag escape and quote handling, and the source location of a
-nested `ONBUILD` instruction. The workflow is intentionally red until those
+difference fails the workflow. The current honest baseline is 4 AST differences
+across 20 fixtures. The remaining differences are builder-flag escape and quote
+handling in three fixtures and the source location of a nested `ONBUILD`
+instruction in one fixture. The workflow is intentionally red until those
 differences are fixed in the grammar.
 
 `tests/arguments.dockerfile` and `tests/argument-edges.dockerfile` cover
@@ -91,6 +92,11 @@ BuildKit's command-specific argument nodes: opaque shell text, raw
 whitespace-delimited lists, quote- and escape-aware words, `ENV`/`LABEL`
 key-value triples, and `HEALTHCHECK` type plus command values. CI compares this
 matching subset separately before running the intentionally strict full corpus.
+
+`tests/json-strings.dockerfile` covers empty exec-form values, every JSON escape,
+Unicode surrogate handling, and line continuations. The lexer gives each escape
+meaning a distinct token type, allowing the adapter to project decoded values
+from parse-tree structure instead of reparsing a raw argument.
 
 The escape-directive fixtures cover directive scope, backtick continuations,
 escaped argument text, and builder flags. The effective escape token comes from
