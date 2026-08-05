@@ -92,12 +92,16 @@ argument_preamble
     ;
 
 builder_flags
-    : BUILDER_FLAG (
-        ARG_WS+ BUILDER_FLAG
+    : builder_flag (
+        ARG_WS+ builder_flag
       )* (
         ARG_WS+ BUILDER_FLAG_TERMINATOR
       )?
     | BUILDER_FLAG_TERMINATOR
+    ;
+
+builder_flag
+    : BUILDER_FLAG_START BUILDER_FLAG_TEXT+
     ;
 
 json_array
@@ -112,20 +116,8 @@ json_string_value
     : JSON_STRING_START (
         JSON_STRING_TEXT
         | JSON_STRING_SPACE
-        | json_string_escape
+        | JSON_STRING_ESCAPE
       )* JSON_STRING_END
-    ;
-
-json_string_escape
-    : JSON_STRING_ESCAPE_QUOTE
-    | JSON_STRING_ESCAPE_BACKSLASH
-    | JSON_STRING_ESCAPE_SLASH
-    | JSON_STRING_ESCAPE_BACKSPACE
-    | JSON_STRING_ESCAPE_FORM_FEED
-    | JSON_STRING_ESCAPE_NEWLINE
-    | JSON_STRING_ESCAPE_CARRIAGE_RETURN
-    | JSON_STRING_ESCAPE_TAB
-    | JSON_STRING_ESCAPE_UNICODE
     ;
 
 string_value
@@ -146,7 +138,7 @@ argument_string_value
 double_string_atom
     : JSON_STRING_TEXT
     | JSON_STRING_SPACE
-    | json_string_escape
+    | JSON_STRING_ESCAPE
     | STRING_TEXT
     | ESCAPE
     | ARG_WS
@@ -228,7 +220,7 @@ list_atom
     | STRING_END
     | JSON_STRING_START
     | JSON_STRING_TEXT
-    | json_string_escape
+    | JSON_STRING_ESCAPE
     | JSON_STRING_END
     | ESCAPE
     | LBRACKET

@@ -41,12 +41,13 @@ jobs:
           go-version-file: tools/buildkit-ast/go.mod
           cache-dependency-path: tools/buildkit-ast/go.sum
 
-      - name: Verify implemented argument and JSON parity
+      - name: Verify implemented argument and builder flag parity
         run: >-
           ./scripts/compare_ast.sh
           tests/argument-edges.dockerfile
           tests/arguments.dockerfile
-          tests/json-strings.dockerfile
+          tests/builder-flag-values-backtick.dockerfile
+          tests/builder-flag-values.dockerfile
 
       - name: Compare all ASTs without normalization
         run: >-
