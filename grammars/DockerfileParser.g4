@@ -124,8 +124,20 @@ json_string_content
     : (
         JSON_STRING_TEXT
         | JSON_STRING_SPACE
-        | JSON_STRING_ESCAPE
+        | json_string_escape
       )*
+    ;
+
+json_string_escape
+    : JSON_STRING_ESCAPE_QUOTE
+    | JSON_STRING_ESCAPE_BACKSLASH
+    | JSON_STRING_ESCAPE_SLASH
+    | JSON_STRING_ESCAPE_BACKSPACE
+    | JSON_STRING_ESCAPE_FORM_FEED
+    | JSON_STRING_ESCAPE_NEWLINE
+    | JSON_STRING_ESCAPE_CARRIAGE_RETURN
+    | JSON_STRING_ESCAPE_TAB
+    | JSON_STRING_ESCAPE_UNICODE
     ;
 
 string_value
@@ -146,7 +158,7 @@ argument_string_value
 double_string_atom
     : JSON_STRING_TEXT
     | JSON_STRING_SPACE
-    | JSON_STRING_ESCAPE
+    | json_string_escape
     | STRING_TEXT
     | ESCAPE
     | ARG_WS
@@ -228,7 +240,7 @@ list_atom
     | STRING_END
     | JSON_STRING_START
     | JSON_STRING_TEXT
-    | JSON_STRING_ESCAPE
+    | json_string_escape
     | JSON_STRING_END
     | ESCAPE
     | LBRACKET

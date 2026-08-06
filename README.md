@@ -68,8 +68,9 @@ deliberately literal:
 
 - BuildKit values come directly from `parser.Node` fields.
 - ANTLR values come directly from emitted tokens and parse-tree structure.
-- Neither adapter rereads source text or normalizes whitespace, continuations,
-  quoting, escapes, or argument grouping.
+- Neither adapter rereads source text. The ANTLR projection maps only explicit
+  parse-tree structure and semantic token types; unsupported forms remain
+  literal.
 
 Comments and parser warnings are not part of the comparison. A unified JSON
 diff is printed for every mismatch; `--keep` retains both projections and their
@@ -82,10 +83,9 @@ in `tools/buildkit-ast/go.mod`. The BuildKit dependency is pinned there so
 comparisons are reproducible.
 
 CI runs the strict comparison over every fixture. Any acceptance or AST
-difference fails the workflow. The current honest baseline is 3 AST differences
-across 23 fixtures. The remaining differences are JSON escape decoding in two
-fixtures and the source location of a nested `ONBUILD` instruction. The workflow
-is intentionally red until those differences are fixed in the grammar.
+difference fails the workflow. The current honest baseline is 1 AST difference
+across 23 fixtures: the source location of a nested `ONBUILD` instruction. The
+workflow is intentionally red until that difference is fixed in the grammar.
 
 `tests/arguments.dockerfile` and `tests/argument-edges.dockerfile` cover
 BuildKit's command-specific argument nodes: opaque shell text, raw
@@ -100,10 +100,10 @@ ordinary argument text must remain raw. Dedicated lexer modes produce the flag
 values before the adapter reads their parser contexts.
 
 `tests/json-string-values.dockerfile` and its backtick counterpart cover empty,
-plain, and continued exec-form values. Quote delimiters live outside the
-`json_string_content` context, allowing the adapter to read parser-owned content
-literally. JSON escapes remain in their source spelling and continue to produce
-strict parity differences instead of being decoded by the adapter.
+plain, fixed-escape, and continued exec-form values. Quote delimiters live
+outside the `json_string_content` context, and each fixed escape meaning has a
+distinct token type. The adapter maps those parser-owned types without
+inspecting their source spelling.
 
 The escape-directive fixtures cover directive scope, backtick continuations,
 escaped argument text, and builder flags. The effective escape token comes from
@@ -112,6 +112,10 @@ the lexer and is included in the projected AST.
 `testdata/ast-parity/heredoc.dockerfile` is an intentional mismatch corpus:
 BuildKit accepts it and attaches the heredoc to the `RUN` node, while the
 current ANTLR grammar rejects the heredoc body.
+
+`testdata/ast-parity/json-unicode-escapes.dockerfile` is an intentional mismatch
+corpus: Unicode escape tokens retain their source spelling while BuildKit stores
+decoded code points and replaces invalid surrogates.
 
 ## Grammar Design
 
@@ -127,9 +131,10 @@ whitespace, and `ARG`/`ENV`/`LABEL` use quote- and escape-aware words. These
 groupings are visible in the parse tree, so the parity adapter does not need to
 reread or normalize source text.
 
-Exec-form JSON strings expose their content separately from quote delimiters.
-The content remains literal: escape decoding is not synthesized by the grammar
-or parity adapter.
+Exec-form JSON strings expose their content separately from quote delimiters
+and represent each fixed JSON escape with a semantic token type. Unicode escapes
+remain literal because decoding code units and surrogate pairs is not available
+as a portable, action-free ANTLR construct.
 
 Argument preamble modes recognize only leading builder flags. Quotes, escapes,
 and continuations are removed while those modes emit `builder_flag` content;
