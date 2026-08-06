@@ -117,11 +117,15 @@ json_array
     ;
 
 json_string_value
-    : JSON_STRING_START (
+    : JSON_STRING_START json_string_content JSON_STRING_END
+    ;
+
+json_string_content
+    : (
         JSON_STRING_TEXT
         | JSON_STRING_SPACE
         | JSON_STRING_ESCAPE
-      )* JSON_STRING_END
+      )*
     ;
 
 string_value

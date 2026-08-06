@@ -82,9 +82,9 @@ in `tools/buildkit-ast/go.mod`. The BuildKit dependency is pinned there so
 comparisons are reproducible.
 
 CI runs the strict comparison over every fixture. Any acceptance or AST
-difference fails the workflow. The current honest baseline is 11 AST
-differences across 21 fixtures. The remaining differences are JSON string
-decoding and the source location of a nested `ONBUILD` instruction. The workflow
+difference fails the workflow. The current honest baseline is 3 AST differences
+across 23 fixtures. The remaining differences are JSON escape decoding in two
+fixtures and the source location of a nested `ONBUILD` instruction. The workflow
 is intentionally red until those differences are fixed in the grammar.
 
 `tests/arguments.dockerfile` and `tests/argument-edges.dockerfile` cover
@@ -98,6 +98,12 @@ matching subset separately before running the intentionally strict full corpus.
 characters, continuations, empty-quote terminators, and the boundary where
 ordinary argument text must remain raw. Dedicated lexer modes produce the flag
 values before the adapter reads their parser contexts.
+
+`tests/json-string-values.dockerfile` and its backtick counterpart cover empty,
+plain, and continued exec-form values. Quote delimiters live outside the
+`json_string_content` context, allowing the adapter to read parser-owned content
+literally. JSON escapes remain in their source spelling and continue to produce
+strict parity differences instead of being decoded by the adapter.
 
 The escape-directive fixtures cover directive scope, backtick continuations,
 escaped argument text, and builder flags. The effective escape token comes from
@@ -120,6 +126,10 @@ one argument value with internal whitespace, list-form commands split on raw
 whitespace, and `ARG`/`ENV`/`LABEL` use quote- and escape-aware words. These
 groupings are visible in the parse tree, so the parity adapter does not need to
 reread or normalize source text.
+
+Exec-form JSON strings expose their content separately from quote delimiters.
+The content remains literal: escape decoding is not synthesized by the grammar
+or parity adapter.
 
 Argument preamble modes recognize only leading builder flags. Quotes, escapes,
 and continuations are removed while those modes emit `builder_flag` content;
