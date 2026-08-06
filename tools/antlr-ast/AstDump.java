@@ -240,7 +240,7 @@ public final class AstDump {
     ) {
         for (DockerfileParser.Json_string_valueContext string :
             context.json_string_value()) {
-            values.add(string.getText());
+            values.add(string.json_string_content().getText());
         }
     }
 
