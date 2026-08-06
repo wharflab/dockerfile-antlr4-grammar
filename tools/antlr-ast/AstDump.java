@@ -240,7 +240,65 @@ public final class AstDump {
     ) {
         for (DockerfileParser.Json_string_valueContext string :
             context.json_string_value()) {
-            values.add(string.json_string_content().getText());
+            values.add(jsonStringValue(string.json_string_content()));
+        }
+    }
+
+    private static String jsonStringValue(
+        DockerfileParser.Json_string_contentContext context
+    ) {
+        StringBuilder value = new StringBuilder();
+        if (context.children == null) {
+            return value.toString();
+        }
+        for (ParseTree child : context.children) {
+            if (child instanceof TerminalNode) {
+                value.append(((TerminalNode) child).getText());
+            } else if (child instanceof DockerfileParser.Json_string_escapeContext) {
+                appendJsonStringEscape(
+                    value,
+                    ((DockerfileParser.Json_string_escapeContext) child)
+                        .getStart()
+                );
+            }
+        }
+        return value.toString();
+    }
+
+    // Fixed escape meaning comes from the token type. Unicode remains literal.
+    private static void appendJsonStringEscape(StringBuilder value, Token token) {
+        switch (token.getType()) {
+            case DockerfileLexer.JSON_STRING_ESCAPE_QUOTE:
+                value.append('"');
+                return;
+            case DockerfileLexer.JSON_STRING_ESCAPE_BACKSLASH:
+                value.append('\\');
+                return;
+            case DockerfileLexer.JSON_STRING_ESCAPE_SLASH:
+                value.append('/');
+                return;
+            case DockerfileLexer.JSON_STRING_ESCAPE_BACKSPACE:
+                value.append('\b');
+                return;
+            case DockerfileLexer.JSON_STRING_ESCAPE_FORM_FEED:
+                value.append('\f');
+                return;
+            case DockerfileLexer.JSON_STRING_ESCAPE_NEWLINE:
+                value.append('\n');
+                return;
+            case DockerfileLexer.JSON_STRING_ESCAPE_CARRIAGE_RETURN:
+                value.append('\r');
+                return;
+            case DockerfileLexer.JSON_STRING_ESCAPE_TAB:
+                value.append('\t');
+                return;
+            case DockerfileLexer.JSON_STRING_ESCAPE_UNICODE:
+                value.append(token.getText());
+                return;
+            default:
+                throw new IllegalStateException(
+                    "unexpected JSON escape token: " + token.getType()
+                );
         }
     }
 
